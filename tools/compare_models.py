@@ -62,6 +62,12 @@ def main():
                                                   "comparison.md"))
     ap.add_argument("--no-common", action="store_true",
                     help="do not restrict to the intersection of image ids")
+    ap.add_argument("--template", default="",
+                    help="restrict to these drawing templates (comma separated), "
+                         "so a full-grid model can be compared with one that was "
+                         "only run on a template slice")
+    ap.add_argument("--subset", default="", choices=["", "organic", "coordination"],
+                    help="restrict to one subset")
     args = ap.parse_args()
 
     specs = []
@@ -75,6 +81,11 @@ def main():
     for name, path in specs:
         results, _, preds = score_predictions(args.manifest, path)
         scored = [r for r in results if "valid" in r]
+        if args.template:
+            keep = set(args.template.split(","))
+            scored = [r for r in scored if r["template"] in keep]
+        if args.subset:
+            scored = [r for r in scored if r["subset"] == args.subset]
         per_model[name] = {r["image_id"]: r for r in scored}
         print(f"{name}: {len(scored)} scored rows from {path}")
 
@@ -91,6 +102,13 @@ def main():
 
     names = [n for n, _ in specs]
     lines = ["# OCSR-complex — model comparison", ""]
+    if args.template or args.subset:
+        scope = []
+        if args.template:
+            scope.append("template " + "/".join(f"`{t}`" for t in args.template.split(",")))
+        if args.subset:
+            scope.append(f"subset `{args.subset}`")
+        lines += [f"Restricted to {' and '.join(scope)}.", ""]
     if not args.no_common:
         lines.append(f"Restricted to the **{len(common)} images** predicted by every "
                      f"model. Metrics are computed over that intersection.")

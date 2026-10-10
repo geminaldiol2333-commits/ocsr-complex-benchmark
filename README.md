@@ -168,56 +168,70 @@ template slots 927 with `acs1996` at 30.0 %, variants roughly even at 356–392
 images each.
 
 It is representative: OCSRGlyph scores 21.3 % exact on the slice versus 21.6 %
-on the full grid.
+on the full grid, and MolSight 23.2 % on both.
 
 ---
 
 ## Baseline results
 
-Two open OCSR models, run end-to-end on the slice (both at full coverage,
+Three open OCSR models, run end-to-end on the slice (all at full coverage,
 1,854 images):
 
 | model | parseable % | exact % | connectivity % | InChIKey % | speed |
 |---|---|---|---|---|---|
-| **OCSRGlyph** (Swin-B/384 + transformer decoder) | 73.5 | **21.3** | **41.8** | 21.4 | 0.04 s/img |
-| **TinyChemVL** (InternViT-6B + Qwen2.5-3B) | 92.9 | 14.5 | 23.0 | 14.6 | 0.97 s/img |
+| **OCSRGlyph** (Swin-B/384 + transformer decoder) | 73.5 | 21.3 | **41.8** | 21.4 | 0.04 s/img |
+| **TinyChemVL** (InternViT-6B + Qwen2.5-3B) | **92.9** | 14.5 | 23.0 | 14.6 | 0.97 s/img |
+| **MolSight** (EfficientViT-L1 + 512-d/6-layer decoder) | 74.9 | **23.2** | 40.2 | **23.2** | 0.095 s/img |
 
 `parseable` = the model returned something RDKit can read as a molecule.
 TinyChemVL often answers with a *description* instead of a SMILES; those count
 as parse failures.
 
-**Where they collapse** (exact %, OCSRGlyph / TinyChemVL):
+**Where they collapse** (exact %, OCSRGlyph / TinyChemVL / MolSight):
 
-| difficulty tag | OCSRGlyph | TinyChemVL |
-|---|---|---|
-| all | 21.3 | 14.5 |
-| `has_bridged_ring` | 9.4 | 7.9 |
-| `has_spiro` | 6.2 | 7.6 |
-| `has_macrocycle` | 3.1 | 2.8 |
-| `has_cage` | 1.4 | 2.7 |
-| `is_stereo_dense` | 8.3 | 6.1 |
-| `is_large` (≥60 heavy atoms) | 1.5 | 0.7 |
-| `is_organometallic` | **28.4** | 2.3 |
-| `bridged + stereo-dense` | 2.9 | 1.7 |
+| difficulty tag | OCSRGlyph | TinyChemVL | MolSight |
+|---|---|---|---|
+| all | 21.3 | 14.5 | **23.2** |
+| `has_bridged_ring` | **9.4** | 7.9 | 9.1 |
+| `has_spiro` | 6.2 | **7.6** | 3.0 |
+| `has_macrocycle` | 3.1 | 2.8 | **6.1** |
+| `has_cage` | 1.4 | 2.7 | **4.6** |
+| `is_stereo_dense` | **8.3** | 6.1 | 7.7 |
+| `is_large` (≥60 heavy atoms) | 1.5 | 0.7 | **2.7** |
+| `is_organometallic` | 28.4 | 2.3 | **30.2** |
+| `bridged + stereo-dense` | 2.9 | 1.7 | **3.2** |
 
-Pairwise over all 1,854 images: both correct **7.3 %**, only OCSRGlyph 14.0 %,
-only TinyChemVL 7.1 %, **neither 71.6 %**.
+Head-to-head over all 1,854 images: all three correct 5.6 %, exclusively
+MolSight 6.6 %, exclusively OCSRGlyph 6.1 %, exclusively TinyChemVL 4.0 %, none
+64.9 % — the remaining 12.8 % are read by exactly two of the three. Within
+that, the two-model OCSRGlyph/TinyChemVL split is: both correct 7.3 %, only
+OCSRGlyph 14.0 %, only TinyChemVL 7.1 %, neither 71.6 %.
 
 What this says:
 
 * **Drawing style is nearly a non-factor.** Exact-match moves only ~4 points
-  across the seven templates — the models are style-robust.
+  across the seven templates (0.8 for MolSight) — the models are style-robust.
 * **Small perturbations are nearly a non-factor.** ±5° rotations and tilts cost
   ~1.5 points. The difficulty here is chemical, not photographic.
-* **Chemical complexity dominates**, falling to 1–3 % on cages, large molecules
+* **Chemical complexity dominates**, falling to 1–6 % on cages, large molecules
   and macrocycles.
-* **Stereochemistry is the largest single error source** — connectivity is
-  roughly twice the exact-match rate.
+* **Stereochemistry is the largest single error source** — for OCSRGlyph
+  connectivity is roughly twice the exact-match rate; MolSight narrows that gap
+  (40.2 % vs 23.2 %).
+* **The models fail differently.** MolSight is the only one of the three to read
+  **strychnine** — the benchmark's flagship behind-the-bridge occlusion case:
+  25 of its 35 drawings, against 0/35 for the other two. It also comes out ahead
+  on macrocycles, cages, large molecules and coordination complexes, while never
+  solving `cubane` (0/35, where OCSRGlyph scores 35/35).
+* **Specialisation does not transfer.** The same network post-trained on 200k
+  stereoisomeric molecules (`stereo_grpo_10_2.pth`, SMILES head only) raises
+  parseability (74.9 % → 76.9 %) while losing exact matches (23.2 % → 22.4 %),
+  and drops strychnine from 25/35 to 0/35.
 
-Both models score far below their published numbers (OCSRGlyph reports 93.8 %
-exact on USPTO-OCSR-5719), which is the intended signal: that corpus is
-dominated by drug-like molecules, this one by the structures 2D OCSR still
-cannot read.
+All three score far below their published numbers (OCSRGlyph reports 93.8 %
+exact on USPTO-OCSR-5719, MolSight 91.2 % on USPTO), which is the intended
+signal: those corpora are dominated by drug-like molecules, this one by the
+structures 2D OCSR still cannot read.
 
 ---
 
@@ -234,8 +248,16 @@ cannot read.
     ├── eval_ocsr.py          score predictions (exact / connectivity / InChIKey)
     ├── compare_models.py     side-by-side model comparison report
     ├── predict_ocsrglyph.py  run OCSRGlyph over a manifest
-    └── predict_tinychemvl.py run TinyChemVL over a manifest
+    ├── predict_tinychemvl.py run TinyChemVL over a manifest
+    └── predict_molsight.py   run MolSight over a manifest
 ```
+
+`predict_molsight.py` needs a checkout of
+[hustvl/MolSight](https://github.com/hustvl/MolSight) (`--repo-dir` or
+`$MOLSIGHT_REPO`) and pulls the released weights from the Hugging Face repo
+`Robert-zwr/MolSight` unless `--checkpoint`/`$MOLSIGHT_CHECKPOINT` says
+otherwise; it also works around the checkout's Linux-only Indigo build, which
+only the training-time renderer uses.
 
 Scoring a model:
 
