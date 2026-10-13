@@ -35,11 +35,40 @@ import os
 import sys
 
 from rdkit import Chem, RDLogger
+from rdkit.Chem.MolStandardize import rdMolStandardize
 
 RDLogger.DisableLog("rdApp.*")
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TAGS = ["has_bridged_ring", "has_spiro", "has_macrocycle", "has_cage",
         "is_stereo_dense", "is_large", "is_organometallic"]
+
+# v1.1 headline: organic compounds, with compact structures down-weighted.
+# Coordination is reported on its own and does not enter this score.
+COMPACT_WEIGHT = 0.25
+COMPACT_MAX_HEAVY = 20
+COMPACT_MAX_STEREO = 2
+_TAUT = rdMolStandardize.TautomerEnumerator()
+_TAUT_CACHE = {}
+_PARTS = None
+
+
+def _coord_parts():
+    """Depiction keys for redrawn complexes. Missing file -> no parts score."""
+    global _PARTS
+    if _PARTS is None:
+        path = os.path.join(ROOT, "data", "coord_parts.json")
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as fh:
+                _PARTS = json.load(fh)
+        else:
+            _PARTS = {}
+    return _PARTS
+
+
+def _parts_key(parts):
+    if not parts:
+        return None
+    return (tuple(parts.get("metals") or ()), tuple(parts.get("ligands") or ()))
 
 
 def load_rows(path):
@@ -69,6 +98,38 @@ def canon(smi, iso=True):
     if m is None or m.GetNumAtoms() == 0:
         return None
     return Chem.MolToSmiles(m, isomericSmiles=iso)
+
+
+def is_compact(row):
+    """Small organic structures. They stay in the headline at COMPACT_WEIGHT."""
+    if row.get("subset") != "organic" or row.get("is_organometallic"):
+        return False
+    heavy, stereo = row.get("n_heavy_atoms"), row.get("n_stereo_assigned")
+    if heavy is None or stereo is None:
+        return False
+    return int(heavy) <= COMPACT_MAX_HEAVY and int(stereo) <= COMPACT_MAX_STEREO
+
+
+def organic_weight(row):
+    if row.get("subset") != "organic":
+        return 0.0
+    return COMPACT_WEIGHT if is_compact(row) else 1.0
+
+
+def tautomer_key(smi):
+    """Canonical-tautomer InChIKey. Empty or huge inputs are not enumerated."""
+    if smi in _TAUT_CACHE:
+        return _TAUT_CACHE[smi]
+    key = None
+    m = Chem.MolFromSmiles(smi or "")
+    if m is not None and 0 < m.GetNumAtoms() <= 80:
+        try:
+            parent = _TAUT.Canonicalize(m)
+            key = Chem.MolToInchiKey(parent)
+        except Exception:
+            key = None
+    _TAUT_CACHE[smi] = key
+    return key
 
 
 def inchikey(smi):
@@ -129,6 +190,7 @@ def score_predictions(manifest_path, predictions_path):
         return {
             "group": name, "n": sum(1 for r in rows if "valid" in r),
             "valid": rate(rows, "valid"), "exact": rate(rows, "exact"),
+            "tautomer": rate(rows, "tautomer"),
             "connectivity": rate(rows, "connectivity"),
             "inchikey_skel": rate(rows, "inchikey_skel"),
             "inchikey_full": rate(rows, "inchikey_full"),
@@ -147,22 +209,35 @@ def score_predictions(manifest_path, predictions_path):
         truth = ref["smiles_isomeric"]
         c_pred, c_true = canon(pred), canon(truth)
         ik_p, ik_t = inchikey(pred), inchikey(truth)
-        results.append({
+        tk_p, tk_t = tautomer_key(pred), tautomer_key(truth)
+        gt_parts = _coord_parts().get(ref["compound_id"])
+        pred_parts = None
+        if gt_parts:
+            from coord_depict import parts_from_smiles
+            pred_parts = parts_from_smiles(pred)
+        row = {
             "image_id": ref["image_id"],
             "image_path": ref["image_path"],
             "compound_id": ref["compound_id"],
             "subset": ref["subset"],
             "template": ref["template"],
             "variant": ref["variant"],
+            "n_heavy_atoms": ref.get("n_heavy_atoms"),
+            "n_stereo_assigned": ref.get("n_stereo_assigned"),
             "valid": c_pred is not None,
             "exact": bool(c_pred and c_true and c_pred == c_true),
+            "tautomer": bool(tk_p and tk_t and tk_p == tk_t),
             "connectivity": bool(canon(pred, False) and canon(truth, False)
                                  and canon(pred, False) == canon(truth, False)),
             "inchikey_full": bool(ik_p and ik_t and ik_p == ik_t),
             "inchikey_skel": bool(ik_p and ik_t and ik_p[:14] == ik_t[:14]),
+            "parts": bool(gt_parts and _parts_key(pred_parts) == _parts_key(gt_parts)),
             "prediction": pred,
             **{t: ref.get(t) for t in TAGS},
-        })
+        }
+        row["is_compact"] = is_compact(row)
+        row["weight"] = organic_weight(row)
+        results.append(row)
 
     scored = [r for r in results if "valid" in r]
     summary = [block("ALL", scored)]
@@ -176,17 +251,56 @@ def score_predictions(manifest_path, predictions_path):
     hard = [r for r in scored if r.get("has_bridged_ring") and r.get("is_stereo_dense")]
     if hard:
         summary.append(block("tag=bridged+stereo_dense", hard))
+    organic = [r for r in scored if r.get("subset") == "organic"]
+    summary.insert(0, compound_block("organic_weighted", organic, organic_weight))
+    summary.insert(1, compound_block(
+        "organic_compact", [r for r in organic if r.get("is_compact")],
+        lambda r: 1.0))
+    summary.insert(2, compound_block(
+        "coordination", [r for r in scored if r.get("subset") == "coordination"],
+        lambda r: 1.0))
     return results, summary, preds
 
 
+def compound_block(name, rows, weight_fn):
+    """One rate per compound, then a weighted mean. `n` is the compound count."""
+    grouped = collections.defaultdict(list)
+    for row in rows:
+        grouped[row["compound_id"]].append(row)
+    buckets = {k: [] for k in ("valid", "exact", "tautomer", "connectivity",
+                               "inchikey_skel", "inchikey_full", "parts")}
+    weights = []
+    for items in grouped.values():
+        weight = float(weight_fn(items[0]))
+        if weight <= 0:
+            continue
+        weights.append(weight)
+        for field in buckets:
+            buckets[field].append(sum(bool(i.get(field)) for i in items) / len(items))
+    total = sum(weights) or 1.0
+
+    def avg(vals):
+        return sum(w * v for w, v in zip(weights, vals)) / total if weights else 0.0
+
+    out = {field: avg(vals) for field, vals in buckets.items()}
+    out.update({"group": name, "n": len(weights), "unit": "compound",
+                "weight_sum": round(sum(weights), 3)})
+    return out
+
+
 def print_summary(summary):
-    w = "{:<32} {:>7} {:>8} {:>8} {:>8} {:>10} {:>10}"
-    print(w.format("group", "n", "valid", "exact", "conn", "ikey_skel", "ikey_full"))
-    print("-" * 88)
+    w = "{:<32} {:>7} {:>8} {:>8} {:>8} {:>8} {:>10} {:>10}"
+    print(w.format("group", "n", "valid", "exact", "taut", "conn", "ikey_skel", "ikey_full"))
+    print("-" * 100)
     for b in summary:
-        print(w.format(b["group"], b["n"], f"{b['valid']:.3f}", f"{b['exact']:.3f}",
-                       f"{b['connectivity']:.3f}", f"{b['inchikey_skel']:.3f}",
-                       f"{b['inchikey_full']:.3f}"))
+        unit = " cmp" if b.get("unit") == "compound" else ""
+        print(w.format(
+            b["group"], str(b["n"]) + unit, f"{b['valid']:.3f}", f"{b['exact']:.3f}",
+            f"{b.get('tautomer', 0):.3f}", f"{b['connectivity']:.3f}",
+            f"{b['inchikey_skel']:.3f}", f"{b['inchikey_full']:.3f}"))
+        if b.get("weight_sum") is not None and b["group"] == "organic_weighted":
+            print(f"  weights: compact {COMPACT_WEIGHT}, others 1; "
+                  f"weight sum {b['weight_sum']}")
 
 
 if __name__ == "__main__":

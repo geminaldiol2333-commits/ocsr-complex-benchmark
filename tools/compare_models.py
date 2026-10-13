@@ -20,7 +20,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from eval_ocsr import score_predictions, load_rows  # noqa: E402
+from eval_ocsr import (score_predictions, load_rows, compound_block,  # noqa: E402
+                       organic_weight, COMPACT_WEIGHT)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_MANIFEST = os.path.join(ROOT, "benchmark", "manifest_all.jsonl")
@@ -116,13 +117,38 @@ def main():
         lines.append("Per-model absolute numbers (models may cover different subsets).")
     lines.append("")
 
-    # ---- headline ----------------------------------------------------
+    # ---- v1.1 headline: organic compounds, compact weight 0.25 ----------
+    rows = []
+    for name in names:
+        organic = [r for r in rows_for(name) if r.get("subset") == "organic"]
+        coord = [r for r in rows_for(name) if r.get("subset") == "coordination"]
+        w = compound_block("organic_weighted", organic, organic_weight)
+        c = compound_block("coordination", coord, lambda r: 1.0)
+        rows.append([name, w["n"], f"{w['weight_sum']}", pct(w["exact"]),
+                     pct(w["tautomer"]), pct(w["connectivity"]),
+                     c["n"], pct(c["exact"]), pct(c.get("parts", 0))])
+    lines += [
+        "## v1.1 headline",
+        "",
+        f"Organic compounds only. Compact structures (≤20 heavy atoms and ≤2 "
+        f"stereocentres) have weight {COMPACT_WEIGHT}; every other organic "
+        f"compound has weight 1. `n` is compounds, and each compound is the "
+        f"mean of its images before the weights are applied. Coordination is "
+        f"scored separately and is not in the organic number. `tautomer %` "
+        f"counts a prediction that is the same molecule in another tautomer.",
+        "",
+        table(["model", "organic n", "weight sum", "exact %", "tautomer %",
+               "connectivity %", "coord n", "coord exact %", "coord parts %"], rows),
+        "",
+    ]
+
+    # ---- image-level overall, kept so template tables stay comparable ----
     rows = []
     for name in names:
         m = metrics(rows_for(name))
         rows.append([name, m["n"], pct(m["valid"]), pct(m["exact"]),
                      pct(m["connectivity"]), pct(m["inchikey_full"])])
-    lines += ["## Overall", "",
+    lines += ["## Image-level overall", "",
               table(["model", "n", "valid %", "exact %", "connectivity %",
                      "InChIKey %"], rows), ""]
 

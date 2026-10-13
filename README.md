@@ -34,7 +34,7 @@ image set is not redistributed.
 | recommended evaluation slice | **1,854** (`random_seed42`, see below) |
 | median / max heavy atoms | 38 / **236** (`maitotoxin`) |
 | median / max assigned stereocentres | 7 / **98** (`maitotoxin`) |
-| structure source | PubChem (100 %), cross-checked with Wikidata |
+| structure source | PubChem. Wikidata was checked; where the two skeletons disagreed, PubChem was kept |
 
 | group | compounds |
 |---|---|
@@ -167,12 +167,23 @@ The shipped slice `random_seed42` contains **1,854 images** (309 × 3 × 2):
 template slots 927 with `acs1996` at 30.0 %, variants roughly even at 356–392
 images each.
 
-It is representative: OCSRGlyph scores 21.3 % exact on the slice versus 21.6 %
-on the full grid, and MolSight 23.2 % on both.
+The v1.1 headline is not that image-micro average. It is the mean of each
+organic compound, with compact molecules (≤20 heavy atoms and ≤2 assigned
+stereocentres; 22 compounds) at weight 0.25. Coordination is scored separately.
+On this slice the organic exact rates are OCSRGlyph 18.0 %, TinyChemVL 14.6 %,
+MolSight 20.2 %, MolSight-stereo 19.1 %. Coordination, scored by ligand
+skeleton on the redrawn structures, is OCSRGlyph 30.3 %, TinyChemVL 3.5 %,
+MolSight 27.2 %, MolSight-stereo 37.7 %. The older 21.3 % / 23.2 % figures
+counted every image equally and included the coordination drawings from before
+they were redrawn.
 
 ---
 
 ## Baseline results
+
+The table below is the **v1.0 image-micro** average on the slice (every image
+weighted equally, including the coordination drawings from before the redraw).
+The v1.1 organic headline is in the previous section.
 
 Three open OCSR models, run end-to-end on the slice (all at full coverage,
 1,854 images):
@@ -280,14 +291,13 @@ and difficulty tag.
 
 ## Known limitations
 
-* **Coordination compounds.** Multi-centre bonding is not expressible in plain
-  SMILES. Following the PubChem convention the metal is often a separate
-  fragment or written with dative bonds, so `n_fragments > 1` on those rows is
-  expected. Sandwich complexes (ferrocene, cobaltocene …) are therefore drawn as
-  free rings plus the metal ion rather than with haptic bonds — a faithful
-  rendering of the deposited structure, but not the classical
-  metal-between-two-rings cartoon. They live in a separate subset and should be
-  scored on their own.
+* **Coordination compounds** are a separate score, not part of the headline.
+  Thirty-six of them were redrawn so the metal sits in a sandwich, a cavity,
+  or a chelate. Ferrocene is two cyclopentadienyl rings with iron between
+  them. Several deposited SMILES were the wrong molecule (manganocene as two
+  cyclopentanes, bis(benzene)chromium as a hexaanion) and those records were
+  replaced. A sandwich still has more than one valid SMILES, so the
+  coordination score matches ligand skeletons rather than one string.
 * **Mixtures are excluded.** Records stored as mixtures of homologues
   (ivermectin B1a/B1b, spinosad A/D) were rejected rather than rendered as two
   disconnected molecules.
