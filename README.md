@@ -181,42 +181,45 @@ they were redrawn.
 
 ## Baseline results
 
-The table below is the **v1.0 image-micro** average on the slice (every image
-weighted equally, including the coordination drawings from before the redraw).
-The v1.1 organic headline is in the previous section.
+v1.1 on `random_seed42`. The organic number is one rate per compound, then a
+weighted mean (compact weight 0.25, weight sum 254.5). Coordination is the
+part-key rate on the redrawn structures and is not inside the organic number.
+MolSight-stereo is the same MolSight network after LoRA on Stereo-200k.
 
-Three open OCSR models, run end-to-end on the slice (all at full coverage,
-1,854 images):
+| model | organic exact % | tautomer % | connectivity % | coordination parts % |
+|---|---|---|---|---|
+| **OCSRGlyph** (Swin-B/384 + transformer decoder) | 18.0 | 20.2 | **42.4** | 30.3 |
+| **TinyChemVL** (InternViT-6B + Qwen2.5-3B) | 14.6 | 16.9 | 24.1 | 3.5 |
+| **MolSight** (EfficientViT-L1 + 512-d/6-layer decoder) | **20.2** | 21.0 | 40.2 | 27.2 |
+| MolSight-stereo (LoRA) | 19.1 | 20.3 | 38.0 | **37.7** |
 
-| model | parseable % | exact % | connectivity % | InChIKey % | speed |
-|---|---|---|---|---|---|
-| **OCSRGlyph** (Swin-B/384 + transformer decoder) | 73.5 | 21.3 | **41.8** | 21.4 | 0.04 s/img |
-| **TinyChemVL** (InternViT-6B + Qwen2.5-3B) | **92.9** | 14.5 | 23.0 | 14.6 | 0.97 s/img |
-| **MolSight** (EfficientViT-L1 + 512-d/6-layer decoder) | 74.9 | **23.2** | 40.2 | **23.2** | 0.095 s/img |
+The 22 compact compounds alone, at weight 1, score 58.3 / 40.9 / 49.2 / 52.3 %
+exact. Strict SMILES on the new coordination drawings is 1.8 / 0 / 6.1 / 3.9 %;
+that column is not the coordination score, because a correct sandwich has more
+than one valid SMILES.
 
-`parseable` = the model returned something RDKit can read as a molecule.
-TinyChemVL often answers with a *description* instead of a SMILES; those count
-as parse failures.
+`parseable` below counts an RDKit-readable SMILES. TinyChemVL often answers
+with a description; those are parse failures. On the organic images of this
+slice, parseable rates are 73.2 / **93.5** / 74.8 %.
 
-**Where they collapse** (exact %, OCSRGlyph / TinyChemVL / MolSight):
+**Where they collapse** (exact % on the 1,626 organic images of the slice):
 
 | difficulty tag | OCSRGlyph | TinyChemVL | MolSight |
 |---|---|---|---|
-| all | 21.3 | 14.5 | **23.2** |
-| `has_bridged_ring` | **9.4** | 7.9 | 9.1 |
+| all organic images | 20.4 | 16.2 | **22.0** |
+| `has_bridged_ring` | **10.7** | 8.9 | 9.6 |
 | `has_spiro` | 6.2 | **7.6** | 3.0 |
-| `has_macrocycle` | 3.1 | 2.8 | **6.1** |
-| `has_cage` | 1.4 | 2.7 | **4.6** |
-| `is_stereo_dense` | **8.3** | 6.1 | 7.7 |
-| `is_large` (≥60 heavy atoms) | 1.5 | 0.7 | **2.7** |
-| `is_organometallic` | 28.4 | 2.3 | **30.2** |
-| `bridged + stereo-dense` | 2.9 | 1.7 | **3.2** |
+| `has_macrocycle` | 3.9 | 3.5 | **6.2** |
+| `has_cage` | 1.9 | 3.9 | **4.3** |
+| `is_stereo_dense` | **8.7** | 6.3 | 8.0 |
+| `is_large` (≥60 heavy atoms) | 1.7 | 0.9 | **3.2** |
+| `bridged + stereo-dense` | 3.1 | 1.9 | **3.4** |
 
-Head-to-head over all 1,854 images: all three correct 5.6 %, exclusively
-MolSight 6.6 %, exclusively OCSRGlyph 6.1 %, exclusively TinyChemVL 4.0 %, none
-64.9 % — the remaining 12.8 % are read by exactly two of the three. Within
-that, the two-model OCSRGlyph/TinyChemVL split is: both correct 7.3 %, only
-OCSRGlyph 14.0 %, only TinyChemVL 7.1 %, neither 71.6 %.
+Head-to-head on those 1,626 organic images: all three correct 6.3 %, exclusively
+MolSight 6.3 %, exclusively OCSRGlyph 6.3 %, exclusively TinyChemVL 4.3 %, none
+65.4 % — the remaining 11.4 % are read by exactly two of the three. The
+OCSRGlyph/TinyChemVL split is: both correct 8.3 %, only OCSRGlyph 12.1 %, only
+TinyChemVL 7.9 %, neither 71.7 %.
 
 What this says:
 
@@ -227,16 +230,19 @@ What this says:
 * **Chemical complexity dominates**, falling to 1–6 % on cages, large molecules
   and macrocycles.
 * **Stereochemistry is the largest single error source** — for OCSRGlyph
-  connectivity is roughly twice the exact-match rate; MolSight narrows that gap
-  (40.2 % vs 23.2 %).
+  connectivity is roughly twice the exact-match rate (42.4 % vs 18.0 % on the
+  organic headline). MolSight narrows that gap (40.2 % vs 20.2 %).
 * **The models fail differently.** MolSight is the only one of the three to read
   **strychnine** — the benchmark's flagship behind-the-bridge occlusion case:
   25 of its 35 drawings, against 0/35 for the other two. It also comes out ahead
-  on macrocycles, cages, large molecules and coordination complexes, while never
-  solving `cubane` (0/35, where OCSRGlyph scores 35/35).
+  on macrocycles, cages and large molecules, while never
+  solving `cubane` (0/35, where OCSRGlyph scores 35/35). On the redrawn
+  coordination set the part-key lead is MolSight-stereo at 37.7 %, then
+  OCSRGlyph at 30.3 %.
 * **Specialisation does not transfer.** The same network post-trained on 200k
   stereoisomeric molecules (`stereo_grpo_10_2.pth`, SMILES head only) raises
-  parseability (74.9 % → 76.9 %) while losing exact matches (23.2 % → 22.4 %),
+  parseability on the organic slice (74.8 % → 76.9 %) while losing exact
+  matches (22.0 % → 21.1 %; organic headline 20.2 % → 19.1 %)
   and drops strychnine from 25/35 to 0/35.
 
 All three score far below their published numbers (OCSRGlyph reports 93.8 %
