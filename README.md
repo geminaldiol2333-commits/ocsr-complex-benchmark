@@ -171,9 +171,9 @@ The v1.1 headline is not that image-micro average. It is the mean of each
 organic compound, with compact molecules (≤20 heavy atoms and ≤2 assigned
 stereocentres; 22 compounds) at weight 0.25. Coordination is scored separately.
 On this slice the organic exact rates are OCSRGlyph 18.0 %, TinyChemVL 14.6 %,
-MolSight 20.2 %, MolSight-stereo 19.1 %. Coordination, scored by ligand
-skeleton on the redrawn structures, is OCSRGlyph 30.3 %, TinyChemVL 3.5 %,
-MolSight 27.2 %, MolSight-stereo 37.7 %. The older 21.3 % / 23.2 % figures
+MolSight 20.2 %, MolSight-stereo 19.1 %, COMO 35.5 %. Coordination, scored by
+ligand skeleton on the redrawn structures, is OCSRGlyph 30.3 %, TinyChemVL 3.5 %,
+MolSight 27.2 %, MolSight-stereo 37.7 %, COMO 5.3 %. The older 21.3 % / 23.2 % figures
 counted every image equally and included the coordination drawings from before
 they were redrawn.
 
@@ -188,32 +188,41 @@ MolSight-stereo is the same MolSight network after LoRA on Stereo-200k.
 
 | model | organic exact % | tautomer % | connectivity % | coordination parts % |
 |---|---|---|---|---|
-| **OCSRGlyph** (Swin-B/384 + transformer decoder) | 18.0 | 20.2 | **42.4** | 30.3 |
+| **OCSRGlyph** (Swin-B/384 + transformer decoder) | 18.0 | 20.2 | 42.4 | 30.3 |
 | **TinyChemVL** (InternViT-6B + Qwen2.5-3B) | 14.6 | 16.9 | 24.1 | 3.5 |
-| **MolSight** (EfficientViT-L1 + 512-d/6-layer decoder) | **20.2** | 21.0 | 40.2 | 27.2 |
+| **MolSight** (EfficientViT-L1 + 512-d/6-layer decoder) | 20.2 | 21.0 | 40.2 | 27.2 |
 | MolSight-stereo (LoRA) | 19.1 | 20.3 | 38.0 | **37.7** |
+| **COMO** (Swin-B + 6-layer decoder, Tanimoto) | **35.5** | **38.5** | **55.6** | 5.3 |
 
-The 22 compact compounds alone, at weight 1, score 58.3 / 40.9 / 49.2 / 52.3 %
-exact. Strict SMILES on the new coordination drawings is 1.8 / 0 / 6.1 / 3.9 %;
+COMO is the Tanimoto-reward checkpoint `models/tanimoto/best.pth` (about 94M
+parameters), decoded greedily with beam size 1. The SMILES is COMO's postprocess
+string. On 48 of the 1,854 images that string did not canonicalize, and the
+decoder SMILES was kept instead. Both official modes drop cis-trans markers
+before canonicalization, which is how COMO reports its own numbers.
+
+The 22 compact compounds alone, at weight 1, score 58.3 / 40.9 / 49.2 / 52.3 /
+53.8 % exact, in the table order above. Strict SMILES on the new coordination
+drawings is 1.8 / 0 / 6.1 / 3.9 / 5.3 %;
 that column is not the coordination score, because a correct sandwich has more
 than one valid SMILES.
 
 `parseable` below counts an RDKit-readable SMILES. TinyChemVL often answers
 with a description; those are parse failures. On the organic images of this
-slice, parseable rates are 73.2 / **93.5** / 74.8 %.
+slice, parseable rates are 73.2 / **93.5** / 74.8 / 73.9 % (OCSRGlyph,
+TinyChemVL, MolSight, COMO).
 
 **Where they collapse** (exact % on the 1,626 organic images of the slice):
 
-| difficulty tag | OCSRGlyph | TinyChemVL | MolSight |
-|---|---|---|---|
-| all organic images | 20.4 | 16.2 | **22.0** |
-| `has_bridged_ring` | **10.7** | 8.9 | 9.6 |
-| `has_spiro` | 6.2 | **7.6** | 3.0 |
-| `has_macrocycle` | 3.9 | 3.5 | **6.2** |
-| `has_cage` | 1.9 | 3.9 | **4.3** |
-| `is_stereo_dense` | **8.7** | 6.3 | 8.0 |
-| `is_large` (≥60 heavy atoms) | 1.7 | 0.9 | **3.2** |
-| `bridged + stereo-dense` | 3.1 | 1.9 | **3.4** |
+| difficulty tag | OCSRGlyph | TinyChemVL | MolSight | COMO |
+|---|---|---|---|---|
+| all organic images | 20.4 | 16.2 | 22.0 | **36.6** |
+| `has_bridged_ring` | 10.7 | 8.9 | 9.6 | **23.1** |
+| `has_spiro` | 6.2 | 7.6 | 3.0 | **27.1** |
+| `has_macrocycle` | 3.9 | 3.5 | 6.2 | **8.1** |
+| `has_cage` | 1.9 | 3.9 | 4.3 | **10.9** |
+| `is_stereo_dense` | 8.7 | 6.3 | 8.0 | **25.1** |
+| `is_large` (≥60 heavy atoms) | 1.7 | 0.9 | 3.2 | **4.0** |
+| `bridged + stereo-dense` | 3.1 | 1.9 | 3.4 | **11.7** |
 
 Head-to-head on those 1,626 organic images: all three correct 6.3 %, exclusively
 MolSight 6.3 %, exclusively OCSRGlyph 6.3 %, exclusively TinyChemVL 4.3 %, none
@@ -223,19 +232,27 @@ TinyChemVL 7.9 %, neither 71.7 %.
 
 What this says:
 
-* **Drawing style is nearly a non-factor.** Exact-match moves only ~4 points
-  across the seven templates (0.8 for MolSight) — the models are style-robust.
-* **Small perturbations are nearly a non-factor.** ±5° rotations and tilts cost
-  ~1.5 points. The difficulty here is chemical, not photographic.
-* **Chemical complexity dominates**, falling to 1–6 % on cages, large molecules
-  and macrocycles.
+* **Drawing style is nearly a non-factor for the first three models.**
+  Exact-match moves only ~4 points across the seven templates (0.8 for
+  MolSight).
+* **Small perturbations are nearly a non-factor for the first three models.**
+  ±5° rotations and tilts cost ~1.5 points. The difficulty here is chemical,
+  not photographic.
+* **Chemical complexity dominates.** The first three models fall to 1–6 % on
+  cages, large molecules and macrocycles. COMO is higher there (cage 10.9 %,
+  macrocycle 8.1 %, large 4.0 %) and still far from solved.
 * **Stereochemistry is the largest single error source** — for OCSRGlyph
   connectivity is roughly twice the exact-match rate (42.4 % vs 18.0 % on the
-  organic headline). MolSight narrows that gap (40.2 % vs 20.2 %).
+  organic headline). MolSight narrows that gap (40.2 % vs 20.2 %). COMO's gap
+  is 55.6 % connectivity against 35.5 % exact.
+* **COMO leads every organic column and every organic difficulty tag**, and
+  does not lead coordination (5.3 % parts). On the organic images its exact
+  rate still moves 10 points across the seven templates (30.9–40.9 %) and 9
+  points across variants (31.2–40.3 %).
 * **The models fail differently.** MolSight is the only one of the three to read
   **strychnine** — the benchmark's flagship behind-the-bridge occlusion case:
-  25 of its 35 drawings, against 0/35 for the other two. It also comes out ahead
-  on macrocycles, cages and large molecules, while never
+  25 of its 35 drawings, against 0/35 for the other two. Among those three it
+  also comes out ahead on macrocycles, cages and large molecules, while never
   solving `cubane` (0/35, where OCSRGlyph scores 35/35). On the redrawn
   coordination set the part-key lead is MolSight-stereo at 37.7 %, then
   OCSRGlyph at 30.3 %.
@@ -245,10 +262,10 @@ What this says:
   matches (22.0 % → 21.1 %; organic headline 20.2 % → 19.1 %)
   and drops strychnine from 25/35 to 0/35.
 
-All three score far below their published numbers (OCSRGlyph reports 93.8 %
-exact on USPTO-OCSR-5719, MolSight 91.2 % on USPTO), which is the intended
-signal: those corpora are dominated by drug-like molecules, this one by the
-structures 2D OCSR still cannot read.
+They still score far below their published numbers (OCSRGlyph reports 93.8 %
+exact on USPTO-OCSR-5719, MolSight 91.2 % on USPTO, COMO 96.1 % on USPTO-10K),
+which is the intended signal: those corpora are dominated by drug-like
+molecules, this one by the structures 2D OCSR still cannot read.
 
 ---
 
@@ -266,8 +283,14 @@ structures 2D OCSR still cannot read.
     ├── compare_models.py     side-by-side model comparison report
     ├── predict_ocsrglyph.py  run OCSRGlyph over a manifest
     ├── predict_tinychemvl.py run TinyChemVL over a manifest
-    └── predict_molsight.py   run MolSight over a manifest
+    ├── predict_molsight.py   run MolSight over a manifest
+    └── predict_como.py       run COMO over a manifest
 ```
+
+`predict_como.py` needs `pip install como-ocsr` and a checkpoint via
+`--checkpoint` or `$COMO_CHECKPOINT`. The COMO row above is
+`models/tanimoto/best.pth` from
+[Keylab/COMO](https://huggingface.co/Keylab/COMO). Those weights are CC BY-NC 4.0.
 
 `predict_molsight.py` needs a checkout of
 [hustvl/MolSight](https://github.com/hustvl/MolSight) (`--repo-dir` or
