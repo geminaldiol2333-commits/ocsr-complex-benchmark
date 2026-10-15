@@ -31,7 +31,8 @@ ligand-skeleton score and is not part of the organic number.
 | **MolSight** (EfficientViT-L1 + 512-d/6-layer decoder) | 20.2 | 21.0 | 40.2 | 27.2 |
 | MolSight-stereo (LoRA) | 19.1 | 20.3 | 38.0 | **37.7** |
 | **MolParser-Mobile-V2** (ViT-Tiny + 6-layer decoder, 10.00M) | 27.9 | 29.2 | 41.9 | 3.9 |
-| **COMO** (Swin-B + 6-layer decoder, Tanimoto) | **35.5** | **38.5** | **55.6** | 5.3 |
+| **COMO** (Swin-B + 6-layer decoder, Tanimoto) | 35.5 | 38.5 | **55.6** | 5.3 |
+| **MolScribe** (Swin-B + graph decoder) | **41.1** | **44.1** | 53.8 | 3.1 |
 
 The OCSRGlyph row is full-stereo exact match. The same predictions, scored with
 that model's chirality-kept convention (tetrahedral chirality kept, cis/trans
@@ -47,6 +48,11 @@ MolParser-Mobile-V2 is
 [UniParser/MolParser-Mobile-V2](https://huggingface.co/UniParser/MolParser-Mobile-V2),
 decoded greedily in FP16 with a 384-token limit. The scored string is the
 E-SMILES trunk before a `<sep>` or `|` suffix. Those weights are CC BY-NC-SA 4.0.
+
+MolScribe is
+[yujieq/MolScribe](https://huggingface.co/yujieq/MolScribe)
+checkpoint `swin_base_char_aux_1m680k`, decoded greedily. The scored string is
+the graph-to-SMILES output. Those weights are MIT.
 
 Slice membership, per-compound results, and finer breakdowns are not published.
 
@@ -68,7 +74,8 @@ COMO 96.1 % on USPTO-10K, MolParser-Mobile-V2 90.9 % accuracy on USPTO).
     ├── predict_tinychemvl.py run TinyChemVL
     ├── predict_molsight.py   run MolSight
     ├── predict_como.py       run COMO
-    └── predict_molparser.py  run MolParser-Mobile-V2
+    ├── predict_molparser.py  run MolParser-Mobile-V2
+    └── predict_molscribe.py  run MolScribe
 ```
 
 The predict scripts read a manifest that is not in this repository.
@@ -78,6 +85,9 @@ The predict scripts read a manifest that is not in this repository.
 
 `predict_molparser.py` needs `torch`, `transformers`, `timm`, and
 `opencv-python`, and a local checkout via `--model` or `$MOLPARSER_MODEL`.
+
+`predict_molscribe.py` needs `molscribe`, `torch`, `timm`, `opencv-python`,
+and `rdkit`, and a checkpoint via `--checkpoint` or `$MOLSCRIBE_CHECKPOINT`.
 
 `predict_molsight.py` needs a checkout of
 [hustvl/MolSight](https://github.com/hustvl/MolSight) (`--repo-dir` or
