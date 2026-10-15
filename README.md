@@ -33,6 +33,11 @@ ligand-skeleton score and is not part of the organic number.
 | **MolParser-Mobile-V2** (ViT-Tiny + 6-layer decoder, 10.00M) | 27.9 | 29.2 | 41.9 | 3.9 |
 | **COMO** (Swin-B + 6-layer decoder, Tanimoto) | **35.5** | **38.5** | **55.6** | 5.3 |
 
+The OCSRGlyph row is full-stereo exact match. The same predictions, scored with
+that model's chirality-kept convention (tetrahedral chirality kept, cis/trans
+ignored), reach **20.9%** organic exact. Connectivity and the coordination
+score stay 42.4% and 30.3%.
+
 COMO is the Tanimoto-reward checkpoint `models/tanimoto/best.pth` from
 [Keylab/COMO](https://huggingface.co/Keylab/COMO), decoded greedily. The scored
 string is its postprocess SMILES, with cis-trans markers dropped before
