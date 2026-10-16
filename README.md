@@ -33,6 +33,7 @@ ligand-skeleton score and is not part of the organic number.
 | **MolParser-Mobile-V2** (ViT-Tiny + 6-layer decoder, 10.00M) | 27.9 | 29.2 | 41.9 | 3.9 |
 | **COMO** (Swin-B + 6-layer decoder, Tanimoto) | 35.5 | 38.5 | 55.6 | 5.3 |
 | **MolScribe** (Swin-B + graph decoder) | 41.1 | 44.1 | 53.8 | 3.1 |
+| **MolNexTR** (Swin-B + graph decoder) | 41.1 | 42.4 | 49.7 | 6.6 |
 | **MarkushGlyph** (Qwen3.5-2B + LoRA) | 5.2 | 8.0 | 17.5 | 14.5 |
 | **DECIMER** (EfficientNetV2 + transformer) | **58.6** | **58.2** | **71.0** | **40.8** |
 
@@ -55,6 +56,11 @@ MolScribe is
 [yujieq/MolScribe](https://huggingface.co/yujieq/MolScribe)
 checkpoint `swin_base_char_aux_1m680k`, decoded greedily. The scored string is
 the graph-to-SMILES output. Those weights are MIT.
+
+MolNexTR is
+[CYF200127/MolNexTR](https://huggingface.co/datasets/CYF200127/MolNexTR)
+checkpoint `molnextr_best`, decoded greedily. The scored string is the
+graph-to-SMILES output. Those weights are Apache 2.0.
 
 MarkushGlyph is the
 [EdisonScientific/MarkushGlyph](https://huggingface.co/EdisonScientific/MarkushGlyph)
@@ -89,6 +95,7 @@ COMO 96.1 % on USPTO-10K, MolParser-Mobile-V2 90.9 % accuracy on USPTO).
     ├── predict_como.py       run COMO
     ├── predict_molparser.py  run MolParser-Mobile-V2
     ├── predict_molscribe.py  run MolScribe
+    ├── predict_molnextr.py   run MolNexTR
     ├── predict_markushglyph.py  run MarkushGlyph
     └── predict_decimer.py    run DECIMER 2.7
 ```
@@ -103,6 +110,9 @@ The predict scripts read a manifest that is not in this repository.
 
 `predict_molscribe.py` needs `molscribe`, `torch`, `timm`, `opencv-python`,
 and `rdkit`, and a checkpoint via `--checkpoint` or `$MOLSCRIBE_CHECKPOINT`.
+
+`predict_molnextr.py` needs `molnextr`, `torch`, `timm`, `opencv-python`,
+and `rdkit`, and a checkpoint via `--checkpoint` or `$MOLNEXTR_CHECKPOINT`.
 
 `predict_markushglyph.py` needs a glyph checkout via `$GLYPH_REPO`, plus the
 adapter directory (`--checkpoint` or `$MARKUSHGLYPH_CHECKPOINT`) and
