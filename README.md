@@ -35,6 +35,7 @@ ligand-skeleton score and is not part of the organic number.
 | **MolScribe** (Swin-B + graph decoder) | 41.1 | 44.1 | 53.8 | 3.1 |
 | **MolNexTR** (Swin-B + graph decoder) | 41.1 | 42.4 | 49.7 | 6.6 |
 | **MarkushGlyph** (Qwen3.5-2B + LoRA) | 5.2 | 8.0 | 17.5 | 14.5 |
+| **MolGrapher** (ResNet-18 heatmaps + GCN graph classifier) | 6.1 | 7.2 | 33.1 | 0.0 |
 | **DECIMER** (EfficientNetV2 + transformer) | **58.6** | **58.2** | **71.0** | **40.8** |
 
 The OCSRGlyph row is full-stereo exact match. The same predictions, scored with
@@ -73,6 +74,23 @@ DECIMER is version 2.7.1 from
 decoded greedily with the standard model. The scored string is the SMILES
 produced by decoding its SELFIES output. Those weights are MIT.
 
+MolGrapher is
+[DS4SD/MolGrapher](https://github.com/DS4SD/MolGrapher), run with the
+`gc_stereo_model` node classifier and `--assign-stereo`, decoded greedily. The
+scored string is the SMILES its own graph post-processing writes. Two of its
+failure modes dominate here. When the predicted graph comes out disconnected,
+MolGrapher returns a single carbon with confidence 0 instead of a molecule;
+that sentinel covers 471 of the 1,854 images, 59 % of the organometallic
+drawings and 88 % of the drawings above 120 heavy atoms. What does survive is
+read as an ordinary organic skeleton, so metal centres come back as the wrong
+element (cisplatin → `N[P-](N)(Cl)Cl`, cobalt-salen → `[O][Sn]34[O]C5=...`),
+which is what puts the coordination column at 0.0. Those weights are MIT.
+
+The release pins PyTorch 1.12 / CUDA 11.7, so it was run against a current CUDA
+build (`torch 2.11+cu128`, same checkpoints, unchanged preprocessing), with
+PaddleOCR — caption removal and label reading only — left on the CPU;
+`tools/setup_molgrapher_wsl.py` collects the small patches that needs.
+
 Slice membership, per-compound results, and finer breakdowns are not published.
 
 The same models report much higher figures on drug-like patent sets
@@ -97,7 +115,9 @@ COMO 96.1 % on USPTO-10K, MolParser-Mobile-V2 90.9 % accuracy on USPTO).
     ├── predict_molscribe.py  run MolScribe
     ├── predict_molnextr.py   run MolNexTR
     ├── predict_markushglyph.py  run MarkushGlyph
-    └── predict_decimer.py    run DECIMER 2.7
+    ├── predict_decimer.py    run DECIMER 2.7
+    ├── predict_molgrapher.py run MolGrapher
+    └── setup_molgrapher_wsl.py  patch a MolGrapher checkout for a current CUDA build
 ```
 
 The predict scripts read a manifest that is not in this repository.
@@ -120,6 +140,14 @@ adapter directory (`--checkpoint` or `$MARKUSHGLYPH_CHECKPOINT`) and
 
 `predict_decimer.py` needs `decimer==2.7.1`. The first import downloads the
 SavedModels into `$PYSTOW_HOME/DECIMER-V2`.
+
+`predict_molgrapher.py` drives a MolGrapher checkout as a subprocess, so the
+interpreter it is handed (`--python`) needs that checkout's environment
+(`torch`, `pytorch-lightning`, `torch-geometric`, `timm`, `mahotas`,
+`albumentations`, `rdkit`, `cairosvg`, `SmilesPE`, `weighted-levenshtein`,
+`paddleocr`) together with the `kd_model` and `gc_*_model` checkpoints. Run it
+with `--repo`/`$MOLGRAPHER_REPO` and `--checkpoints`/`$MOLGRAPHER_CHECKPOINTS`,
+or point `--mol-dir` at the save folder of a run you already have.
 
 `predict_molsight.py` needs a checkout of
 [hustvl/MolSight](https://github.com/hustvl/MolSight) (`--repo-dir` or
