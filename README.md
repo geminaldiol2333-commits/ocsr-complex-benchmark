@@ -29,11 +29,12 @@ ligand-skeleton score and is not part of the organic number.
 | **OCSRGlyph** (Swin-B/384 + transformer decoder) | 18.0 | 20.2 | 42.4 | 30.3 |
 | **TinyChemVL** (InternViT-6B + Qwen2.5-3B) | 14.6 | 16.9 | 24.1 | 3.5 |
 | **MolSight** (EfficientViT-L1 + 512-d/6-layer decoder) | 20.2 | 21.0 | 40.2 | 27.2 |
-| MolSight-stereo (LoRA) | 19.1 | 20.3 | 38.0 | **37.7** |
+| MolSight-stereo (LoRA) | 19.1 | 20.3 | 38.0 | 37.7 |
 | **MolParser-Mobile-V2** (ViT-Tiny + 6-layer decoder, 10.00M) | 27.9 | 29.2 | 41.9 | 3.9 |
-| **COMO** (Swin-B + 6-layer decoder, Tanimoto) | 35.5 | 38.5 | **55.6** | 5.3 |
-| **MolScribe** (Swin-B + graph decoder) | **41.1** | **44.1** | 53.8 | 3.1 |
+| **COMO** (Swin-B + 6-layer decoder, Tanimoto) | 35.5 | 38.5 | 55.6 | 5.3 |
+| **MolScribe** (Swin-B + graph decoder) | 41.1 | 44.1 | 53.8 | 3.1 |
 | **MarkushGlyph** (Qwen3.5-2B + LoRA) | 5.2 | 8.0 | 17.5 | 14.5 |
+| **DECIMER** (EfficientNetV2 + transformer) | **58.6** | **58.2** | **71.0** | **40.8** |
 
 The OCSRGlyph row is full-stereo exact match. The same predictions, scored with
 that model's chirality-kept convention (tetrahedral chirality kept, cis/trans
@@ -61,6 +62,11 @@ LoRA on `Qwen/Qwen3.5-2B-Base`, decoded greedily. The prompt asks for an
 ordinary molecule and an empty Markush extension. The scored string is the
 CXSMILES core before a `|` extension. Those weights are Apache 2.0.
 
+DECIMER is version 2.7.1 from
+[Kohulan/DECIMER-Image_Transformer](https://github.com/Kohulan/DECIMER-Image_Transformer),
+decoded greedily with the standard model. The scored string is the SMILES
+produced by decoding its SELFIES output. Those weights are MIT.
+
 Slice membership, per-compound results, and finer breakdowns are not published.
 
 The same models report much higher figures on drug-like patent sets
@@ -83,7 +89,8 @@ COMO 96.1 % on USPTO-10K, MolParser-Mobile-V2 90.9 % accuracy on USPTO).
     ├── predict_como.py       run COMO
     ├── predict_molparser.py  run MolParser-Mobile-V2
     ├── predict_molscribe.py  run MolScribe
-    └── predict_markushglyph.py  run MarkushGlyph
+    ├── predict_markushglyph.py  run MarkushGlyph
+    └── predict_decimer.py    run DECIMER 2.7
 ```
 
 The predict scripts read a manifest that is not in this repository.
@@ -100,6 +107,9 @@ and `rdkit`, and a checkpoint via `--checkpoint` or `$MOLSCRIBE_CHECKPOINT`.
 `predict_markushglyph.py` needs a glyph checkout via `$GLYPH_REPO`, plus the
 adapter directory (`--checkpoint` or `$MARKUSHGLYPH_CHECKPOINT`) and
 `Qwen3.5-2B-Base` (`--base-model` or `$MARKUSH_BASE_MODEL`).
+
+`predict_decimer.py` needs `decimer==2.7.1`. The first import downloads the
+SavedModels into `$PYSTOW_HOME/DECIMER-V2`.
 
 `predict_molsight.py` needs a checkout of
 [hustvl/MolSight](https://github.com/hustvl/MolSight) (`--repo-dir` or
