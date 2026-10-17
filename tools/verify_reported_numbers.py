@@ -77,8 +77,10 @@ def parse_table(text):
 def parse_decomposition(text):
     """Rows of the Table 3 decomposition: model -> 7 numeric cells."""
     lines = text.splitlines()
+    # the header was relabelled once the denominators were written down; accept both
     start = next(i for i, line in enumerate(lines)
-                 if line.startswith("| Model | Exact (image level) %"))
+                 if line.startswith("| Model | Exact (image level) %")
+                 or line.startswith("| Model | Exact Match %"))
     rows = {}
     for line in lines[start + 2:]:
         if not line.startswith("|"):
