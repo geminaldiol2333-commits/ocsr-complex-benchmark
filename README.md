@@ -31,7 +31,7 @@ Evaluation is conducted on a stratified, seeded held-out slice (`random_seed42`)
 * **Chirality-Kept Match (`Chirality %`)**: Evaluates canonical SMILES identity after stripping double-bond $E/Z$ (`/` and `\`) directional markers while strictly retaining all tetrahedral (`@`/`@@`) stereocentres. Several OCSR pipelines intentionally omit or strip alkene $E/Z$ stereochemistry during post-processing; comparing `Organic Exact %` against `Chirality %` isolates $E/Z$ convention penalties from true tetrahedral inversion errors.
 * **Tautomer Match (`Tautomer %`)**: Evaluates canonical-tautomer InChIKey equivalence via RDKit `TautomerEnumerator` (applied to structures up to 80 heavy atoms), ensuring that valid prototropic tautomers (e.g., keto–enol or amide–imidol forms) are not penalized as topological errors.
 * **Constitutional Connectivity (`Connectivity %`)**: Stereo-blind canonical SMILES identity (equivalent to matching the 14-character InChIKey skeleton block on organic structures), measuring pure 2D molecular graph topology recovery.
-* **Structural Similarity (`ECFP4 Tanimoto`)**: Mean Morgan fingerprint (radius 2, 2048 bits) Tanimoto similarity over all organic depictions (assigning $0.0$ to unparseable outputs), quantifying partial structural recovery on near-miss predictions.
+* **Structural Similarity (`ECFP4 Tanimoto`)**: Mean Morgan fingerprint (radius 2, 2048 bits) Tanimoto similarity over all organic depictions, assigning $0.0$ to unparseable outputs, quantifying partial structural recovery on near-miss predictions. This column is an **image-level, unweighted** mean, unlike the compound-weighted columns beside it; compound-weighting it moves the values down by up to $1.6$ pp (MarkushGlyph $39.1 	o 37.5$).
 * **Coordination Ligand-Skeleton Score (`Coordination Parts %`)**: Multi-centre haptic ($\eta^5$-Cp, $\eta^6$-arene) and dative coordination bonding has no unique canonical SMILES representation, and standard InChI normalization frequently corrupts metal–ligand connectivity. Coordination depictions are therefore authored as explicit complexes and evaluated via a canonical **part key** (`coord_depict.py`) that verifies: (i) the identity of each metal centre and its non-haptic $\sigma$/chelate coordination sphere, and (ii) the charge- and radical-normalized canonical skeletons of all coordinated ligands (e.g., aromatic, anionic, and radical cyclopentadienyl encodings match one another, whereas reduced cyclopentane or uncoordinated floating fragments are rejected).
 
 ---
@@ -44,19 +44,21 @@ We evaluate 11 open-weights OCSR models spanning three primary architectural par
 2. **2D Molecular Graph Reconstruction Hybrids** (**MolNexTR**, **MolScribe**, **MolGrapher**);
 3. **Vision–Language Models (VLMs)** (**TinyChemVL**, **MarkushGlyph**).
 
-| Model | Paradigm & Backbone | Org. Valid % | **Organic Exact %** | Chirality ($E/Z$-Blind) % | Tautomer % | Connectivity % | ECFP4 Tanimoto % | **Coord. Parts %** | Published Patent Exact % |
+| Model | Paradigm & Backbone | Org. Valid % | **Organic Exact %** (95 % CI) | Chirality ($E/Z$-Blind) % | Tautomer % | Connectivity % | ECFP4 Tanimoto % | **Coord. Parts %** | Published Patent Exact % |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| **DECIMER** (v2.7.1) | EfficientNetV2 + Transformer $\to$ **SELFIES** | 93.0 | **58.6** | **59.2** | **58.2** | **71.0** | **87.2** | **40.8** | ~90–96 (DECIMER) |
-| **MolNexTR** | ConvNeXt + ViT + **Graph/SMILES** Decoder | 68.3 | 41.1 | 43.5 | 42.4 | 49.7 | 61.9 | 6.6 | 93.8 (USPTO) |
-| **MolScribe** | Swin-B + **Graph** Autoregressive Decoder | 68.2 | 41.1 | 44.0 | 44.1 | 53.8 | 63.8 | 3.1 | 93.3 (USPTO) |
-| **COMO** (Tanimoto-RL) | Swin-B + 6L Decoder + Graph Stereo Postproc | 74.0 | 35.5 | 50.3 | 38.5 | 55.6 | 68.5 | 5.3 | 96.1 (USPTO-10K) |
-| **MolParser-Mobile-V2** | ViT-Tiny + 6L Decoder (10.0M) $\to$ **E-SMILES** | 79.0 | 27.9 | 28.2 | 29.2 | 41.9 | 65.9 | 3.9 | 90.9 (USPTO) |
-| **MolSight** | EfficientViT-L1 + 6L Decoder (67.5M, Char+Edge) | 74.3 | 20.2 | 20.3 | 21.0 | 40.2 | 61.9 | 27.2 | 91.2 (USPTO) |
-| **MolSight-stereo** | EfficientViT-L1 + 6L Decoder + Stereo-GRPO LoRA | 76.2 | 19.1 | 19.1 | 20.3 | 38.0 | 61.4 | 37.7 | — |
-| **OCSRGlyph** | Swin-B/384 + Transformer Decoder $\to$ **SMILES** | 72.2 | 18.0 | 20.9 | 20.2 | 42.4 | 62.7 | 30.3 | 93.8 (USPTO-5719) |
-| **TinyChemVL** | InternViT-6B + Qwen2.5-3B (~9B VLM) $\to$ **SMILES** | **93.5** | 14.6 | 17.2 | 16.9 | 24.1 | 52.1 | 3.5 | — |
-| **MolGrapher** | ResNet-18 Keypoints + **GCN** Classifier + OCR | 83.0 | 6.1 | 8.9 | 7.2 | 33.1 | 49.5 | 0.0 | ~92 (USPTO-10K) |
-| **MarkushGlyph** | Qwen3.5-2B-Base + LoRA VLM $\to$ **CXSMILES** | 58.2 | 5.2 | 5.6 | 8.0 | 17.5 | 39.1 | 14.5 | — |
+| **DECIMER** (v2.7.1) | EfficientNetV2 + Transformer $\to$ **SELFIES** | 93.0 | **58.6** (52.9–64.3) | **59.2** | **58.2** | **71.0** | **87.2** | **40.8** | ~90–96 (DECIMER) |
+| **MolNexTR** | ConvNeXt + ViT + **Graph/SMILES** Decoder | 68.3 | **41.1** (35.5–46.6) | 43.5 | 42.4 | 49.7 | 61.9 | 6.6 | 93.8 (USPTO) |
+| **MolScribe** | Swin-B + **Graph** Autoregressive Decoder | 68.2 | **41.1** (35.6–46.8) | 44.0 | 44.1 | 53.8 | 63.8 | 3.1 | 93.3 (USPTO) |
+| **COMO** (Tanimoto-RL) | Swin-B + 6L Decoder + Graph Stereo Postproc | 74.0 | **35.5** (29.9–41.2) | 50.3 | 38.5 | 55.6 | 68.5 | 5.3 | 96.1 (USPTO-10K) |
+| **MolParser-Mobile-V2** | ViT-Tiny + 6L Decoder (10.0M) $\to$ **E-SMILES** | 79.0 | **27.9** (23.1–33.0) | 28.2 | 29.2 | 41.9 | 65.9 | 3.9 | 90.9 (USPTO) |
+| **MolSight** | EfficientViT-L1 + 6L Decoder (67.5M, Char+Edge) | 74.3 | **20.2** (15.9–24.9) | 20.3 | 21.0 | 40.2 | 61.9 | 27.2 | 91.2 (USPTO) |
+| **MolSight-stereo** | EfficientViT-L1 + 6L Decoder + Stereo-GRPO LoRA | 76.2 | **19.1** (14.9–23.5) | 19.1 | 20.3 | 38.0 | 61.4 | 37.7 | — |
+| **OCSRGlyph** | Swin-B/384 + Transformer Decoder $\to$ **SMILES** | 72.2 | **18.0** (14.0–22.2) | 20.9 | 20.2 | 42.4 | 62.7 | 30.3 | 93.8 (USPTO-5719) |
+| **TinyChemVL** | InternViT-6B + Qwen2.5-3B (~9B VLM) $\to$ **SMILES** | **93.5** | **14.6** (11.0–18.4) | 17.2 | 16.9 | 24.1 | 52.1 | 3.5 | — |
+| **MolGrapher** | ResNet-18 Keypoints + **GCN** Classifier + OCR | 83.0 | **6.1** (3.7–8.8) | 8.9 | 7.2 | 33.1 | 49.5 | 0.0 | ~92 (USPTO-10K) |
+| **MarkushGlyph** | Qwen3.5-2B-Base + LoRA VLM $\to$ **CXSMILES** | 58.2 | **5.2** (2.9–7.8) | 5.6 | 8.0 | 17.5 | 39.1 | 14.5 | — |
+
+> **Confidence intervals and significance.** The 95 % intervals in the exact column come from 10,000 bootstrap resamples of **compounds**, not images: the six drawings of one compound are strongly correlated, so resampling images would understate the uncertainty by roughly a factor of two. Pairwise differences are tested with a paired bootstrap over the same resamples and Holm-corrected across all 55 model pairs (`tools/stats_ci.py`). 45 of the 55 pairs separate at 5 %; the pairs that do **not** are MolNexTR/MolScribe (41.1 vs 41.1, $p_{\text{Holm}} = 1.0$), MolSight/MolSight-stereo/OCSRGlyph ($\le 2.2$ pp apart), MolGrapher/MarkushGlyph (6.1 vs 5.2), and — at the margin — MolSight vs TinyChemVL, MolScribe vs COMO and MolNexTR vs COMO ($p_{\text{Holm}} = 0.07$–$0.09$). Rankings inside those groups are not supported by the data.
 
 > **Note on Compact vs. Complex Scaffolds:** On the compact organic baseline stratum within the benchmark, models achieve substantially higher exact-match rates (**DECIMER** 78.0%, **MolParser-Mobile-V2** 67.4%, **MolScribe** 62.9%, **OCSRGlyph** 58.3%, **COMO** 53.8%, **MolNexTR** 53.0%, **MolSight-stereo** 52.3%, **MolSight** 49.2%, **MolGrapher** 43.2%, **TinyChemVL** 40.9%, **MarkushGlyph** 29.5%). Down-weighting this easy stratum exposes the true performance drop on complex chemical structures, where every evaluated model falls 35–85 percentage points below its published patent-benchmark accuracy.
 
@@ -84,7 +86,7 @@ Table 2 reports model accuracy across individual structural difficulty tags on t
 ### 2.3 Error Taxonomy & Stereochemical Fidelity
 To disentangle syntactic generation failures, topological graph errors, and stereochemical misassignments, Table 3 partitions $100\%$ of organic image predictions into mutually exclusive outcome categories, alongside conditional stereochemical precision ($\text{Exact} / \text{Connectivity}$) and near-miss similarity on topologically incorrect but valid predictions.
 
-| Model | Exact Match % | $E/Z$ Stereo Loss % | Tetrahedral Stereo Loss % | Skeleton / Topo Error % | Unparseable / Invalid % | Conditional Stereo Precision % | Skeleton Error Mean Tanimoto % |
+| Model | Exact (image level) % | $E/Z$ Stereo Loss % | Tetrahedral Stereo Loss % | Skeleton / Topo Error % | Unparseable / Invalid % | Conditional Stereo Precision % | Skeleton Error Mean Tanimoto % |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | **DECIMER** | **59.8** | 0.6 | 11.1 | 21.6 | 6.9 | 83.6 | **72.5** |
 | **MolNexTR** | 41.8 | 2.4 | 5.7 | 18.8 | 31.4 | **83.8** | 64.1 |
@@ -177,6 +179,10 @@ All models were evaluated deterministically (greedy decoding, beam size 1) using
 └── tools/
     ├── make_random_split.py        # Stratified, seeded evaluation slice generator
     ├── eval_ocsr.py                # Primary scoring harness (Exact, Tautomer, Connectivity, InChIKey, Parts)
+    ├── eval_extra.py               # Chirality-kept, E/Z-only, ECFP4 Tanimoto, error decomposition
+    ├── stats_ci.py                 # Compound-level bootstrap CIs + paired significance tests
+    ├── results_source.py           # Which scored run each table column is read from
+    ├── verify_reported_numbers.py  # Machine-checks this README's tables against the tools
     ├── compare_models.py           # Side-by-side multi-model comparison and agreement analyzer
     ├── predict_decimer.py          # Resumable inference driver for DECIMER 2.7.1
     ├── predict_molnextr.py         # Resumable inference driver for MolNexTR
@@ -190,6 +196,14 @@ All models were evaluated deterministically (greedy decoding, beam size 1) using
     ├── setup_molgrapher_wsl.py     # Compatibility patcher for MolGrapher on modern PyTorch/CUDA
     └── predict_markushglyph.py     # Resumable inference driver for MarkushGlyph
 ```
+
+### Reproducing the Tables
+`tools/verify_reported_numbers.py` parses Tables 1 and 3 of this README and re-derives every
+cell from `tools/eval_ocsr.py`, `tools/eval_extra.py` and `tools/stats_ci.py`; the last run
+matched **154 / 154** cells. Scoring is pinned to `rdkit==2026.09.1` (see `requirements.txt`),
+and switching the RDKit build is tracked in `data/eval_results/all_models/version_delta.md`:
+re-scoring all 15 runs under the pinned build moved 3 of 300 numbers, all of them the
+coordination part-key score on runs whose predictions predate the complex redraw.
 
 ### Running Inference & Scoring
 All `predict_*.py` drivers accept a benchmark manifest (`--manifest`) and write resumable JSONL predictions (`{"image_id": "<id>", "prediction": "<SMILES>"}`):
