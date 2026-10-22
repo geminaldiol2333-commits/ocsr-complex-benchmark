@@ -88,7 +88,7 @@ Table 2 reports compound-weighted accuracy across individual structural difficul
 ### 2.3 Error Taxonomy & Stereochemical Fidelity (v2.0)
 To disentangle syntactic generation failures, topological graph errors, and stereochemical misassignments, Table 3 partitions $100\%$ of v2.0 organic image predictions into five mutually exclusive outcome categories, alongside conditional stereochemical precision ($\text{Exact} / \text{Connectivity}$ and its $E/Z$-blind counterpart), near-miss similarity on topologically incorrect but valid predictions, and median heavy-atom count deviation $|\Delta N_{\text{heavy}}|$.
 
-| Model | Exact Match % | $E/Z$ Stereo Loss % | Tetrahedral / Both Stereo Loss % | Skeleton / Topo Error % | Unparseable / Invalid % | Conditional Stereo Precision % *(No-$E/Z$)* | Skeleton Error Mean Tanimoto % | Median $|\Delta N_{\text{heavy}}|$ (Skel. Err.) |
+| Model | Exact Match % | $E/Z$ Stereo Loss % | Tetrahedral / Both Stereo Loss % | Skeleton / Topo Error % | Unparseable / Invalid % | Conditional Stereo Precision % *(No-$E/Z$)* | Skeleton Error Mean Tanimoto % | Median $\lvert\Delta N_{\text{heavy}}\rvert$ (Skel. Err.) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | **DECIMER** | **59.2** | 3.1 | 16.0 | 17.2 | **4.5** | **75.6** *(79.6)* | 70.0 | **1.0** |
 | **MolScribe** | 45.3 | 6.4 | 11.7 | **10.6** | 26.0 | 71.5 *(81.6)* | 63.1 | **1.0** |

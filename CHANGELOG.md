@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.2 — 2026-10-22
+
+Fix the section 2.3 table. The median heavy-atom header used raw vertical bars inside the math, which Markdown treated as extra columns, so the table did not render.
+
 ## v2.0.1 — 2026-10-22
 
 The sample gallery is redrawn with the v2.0 depiction pipeline. It keeps the v1.1 organic legends and no longer includes coordination complexes. The drawings are illustrations, not the held-out evaluation set.
