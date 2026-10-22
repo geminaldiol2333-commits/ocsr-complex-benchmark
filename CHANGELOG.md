@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.4 — 2026-10-22
+
+Add a Chinese README and a language switch at the top of both files. Numeric changes in the English README are written with a plain arrow, so the page no longer shows the Chinese word for "to" or a trailing currency sign.
+
 ## v2.0.3 — 2026-10-22
 
 Write numeric ranges as plain text. A range such as 30–60 had been wrapped in dollar signs, and the closing dollar sign was shown as the currency word.
