@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.3 — 2026-10-22
+
+Write numeric ranges as plain text. A range such as 30–60 had been wrapped in dollar signs, and the closing dollar sign was shown as the currency word.
+
 ## v2.0.2 — 2026-10-22
 
 Fix the section 2.3 table. The median heavy-atom header used raw vertical bars inside the math, which Markdown treated as extra columns, so the table did not render.
