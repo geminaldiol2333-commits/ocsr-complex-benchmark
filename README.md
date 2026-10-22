@@ -6,7 +6,7 @@ To prevent training-set contamination and benchmark overfitting, **the evaluatio
 
 ![Sample gallery](samples/gallery.png)
 
-*Figure 1: Illustrative examples of the rendering pipeline under `samples/`. These depictions demonstrate the journal stylesheets and geometric perturbations used in OCSR-complex; they are not part of the held-out evaluation set.*
+*Figure 1: Organic examples under `samples/`, redrawn with the v2.0 depiction pipeline. The sheet keeps the v1.1 organic legends (journal stylesheets and geometric poses) and leaves out coordination complexes. These drawings are not part of the held-out evaluation set.*
 
 ---
 

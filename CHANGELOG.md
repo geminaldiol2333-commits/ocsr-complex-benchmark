@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.0.1 — 2026-10-22
+
+The sample gallery is redrawn with the v2.0 depiction pipeline. It keeps the v1.1 organic legends and no longer includes coordination complexes. The drawings are illustrations, not the held-out evaluation set.
+
 ## v2.0.0 — 2026-10-22
 
 The organic headline is the ACS 1996 pose protocol: one journal stylesheet and every geometric variant, scored at compound level. v1.0 and v1.1 found that stylesheet choice moves exact-match by only a few points, so v2.0 spends the evaluation on pose coverage instead of another random template slice. The image grid, manifests, and ground truth remain private.
