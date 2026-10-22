@@ -1,16 +1,16 @@
 # OCSR-complex: A Held-Out Benchmark for Structurally Hard Optical Chemical Structure Recognition
 
-**OCSR-complex** is a held-out evaluation benchmark designed to stress-test Optical Chemical Structure Recognition (OCSR / image-to-structure) systems beyond the drug-like patent regime. Whereas contemporary OCSR models routinely report $>90\%$ exact-match accuracy on standard patent corpora (e.g., USPTO, Clef, UOB), their performance degrades sharply on stereochemically dense, topologically entangled, and multi-centre coordinated depictions that are ubiquitous in natural products, total synthesis, and organometallic literature.
+**OCSR-complex** is a held-out evaluation benchmark designed to stress-test Optical Chemical Structure Recognition (OCSR / image-to-structure) systems far beyond the drug-like patent regime. Whereas contemporary OCSR models routinely report $>90\%$ exact-match accuracy on standard patent corpora (e.g., USPTO, Clef, UOB), their performance degrades sharply on stereochemically dense, topologically entangled, and multi-centre coordinated depictions that are ubiquitous in natural products, total synthesis, and organometallic literature.
 
-To prevent training-set contamination and benchmark overfitting, **the evaluation image grid, sampling manifests, compound registry, and ground-truth annotations remain strictly private**. This public repository provides the benchmark methodology, the 11-model evaluation leaderboard and diagnostic analysis, an illustrative sample gallery (`samples/`), and the complete inference and scoring harness (`tools/`).
+To prevent training-set contamination and benchmark overfitting, **the evaluation image grid, sampling manifests, compound registry, and ground-truth annotations remain strictly private**. This public repository provides the benchmark methodology, the 11-model v2.0 evaluation leaderboard and diagnostic analysis (alongside longitudinal comparisons against v1.1), an illustrative sample gallery (`samples/`), and the complete inference and scoring harness (`tools/`).
 
 ![Sample gallery](samples/gallery.png)
 
-*Figure 1: Illustrative examples of the rendering pipeline under `samples/`. These depictions demonstrate the journal stylesheets and geometric perturbations used in OCSR-complex; they are not part of the held-out evaluation slice.*
+*Figure 1: Illustrative examples of the rendering pipeline under `samples/`. These depictions demonstrate the journal stylesheets and geometric perturbations used in OCSR-complex; they are not part of the held-out evaluation set.*
 
 ---
 
-## 1. Benchmark Design & Evaluation Protocol
+## 1. Benchmark Design & v2.0 Evaluation Protocol
 
 ### 1.1 Targeted Structural Failure Modes
 The benchmark deliberately over-samples five classes of 2D chemical depictions where visual perception and topological reconstruction are genuinely ambiguous:
@@ -18,90 +18,94 @@ The benchmark deliberately over-samples five classes of 2D chemical depictions w
 1. **Bridged Polycyclic & Cage Architectures** — Systems containing bonds drawn *behind* a bridgehead or within high-strain polycyclic cages, inducing severe 2D bond-crossing occlusion (`has_bridged_ring`, `has_cage`).
 2. **Quaternary Spiro Systems** — Molecules featuring one or more spiro-fused ring junctions where local bond-angle congestion complicates vertex degree assignment (`has_spiro`).
 3. **Macrocycles & Large Biopolymers** — Large-ring macrolides, polyenes, cyclic peptides, and polyether ionophores where long-range ring-closure tracking and conformational degeneracy challenge sequence and graph decoders (`has_macrocycle`, `is_large`).
-4. **Stereo-Dense Natural Products** — Scaffolds carrying dense arrays of wedge/hash bonds and configurated alkenes, testing fine-grained local visual discrimination coupled with global Cahn–Ingold–Prelog (CIP) / SMILES parity consistency (`is_stereo_dense`).
-5. **Coordination & Organometallic Complexes** — A dedicated subset spanning $\eta^5/\eta^6$ sandwich metallocenes, metallated macrocyclic cavities (porphyrins, chlorins, phthalocyanines, corrins), and $\sigma$-bonded / chelated transition-metal complexes (`is_organometallic`).
+4. **Stereo-Dense Natural Products** — Scaffolds carrying dense arrays of wedge/hash bonds and configurated alkenes, testing fine-grained local visual discrimination coupled with global Cahn–Ingold–Prelog (CIP) / SMILES parity consistency (`is_stereo_dense`, `has_e_z`).
+5. **Coordination & Organometallic Complexes** — A dedicated benchmark module (`coordination_benchmark/`) spanning $\eta^5/\eta^6$ sandwich metallocenes, metallated macrocyclic cavities (porphyrins, chlorins, phthalocyanines, corrins), and $\sigma$-bonded / chelated transition-metal complexes (`is_organometallic`).
 
-### 1.2 Authentic Typographic & Geometric Diversity
-All structures are curated from [PubChem](https://pubchem.ncbi.nlm.nih.gov/) (cross-verified against [Wikidata](https://www.wikidata.org/) for constitutional, formula, and InChI consistency) and laid out via explicit 2D coordinate generation without destructive auto-cleaning. Depictions are rendered in **ChemDraw** across multiple authentic publisher stylesheets (matching official journal graphic specifications for bond length, stroke width, bold wedge width, hash spacing, atom label typography, and CPK element coloring), combined with bounded in-plane vector rotations and out-of-plane perspective homography tilts.
+### 1.2 Evolution from v1.1 to v2.0
+Building upon the empirical findings and methodological audit of v1.1, **OCSR-complex v2.0** introduces four structural and statistical upgrades:
+
+* **Substantially Expanded Organic Corpus & Dedicated Coordination Separation**: The organic evaluation corpus has been more than doubled in chemical diversity, while multi-centre coordination complexes are decoupled into an independent benchmark track (`coordination_benchmark/`) so that organometallic representation conventions never confound organic accuracy metrics.
+* **Exhaustive Five-Variant `acs1996` Evaluation**: Full-grid multi-stylesheet experiments in v1.0/v1.1 established that publisher stylesheet variation shifts accuracy by only $\sim 0.8\text{--}3.7$ percentage points (standard deviation $2.2\text{--}3.2\%$ across seven journal templates), whereas sub-sampling template/pose pairs (`random_seed42`) introduces sampling variance. In v2.0, the canonical evaluation protocol tests **every compound across all five geometric pose variants** (`v0_orig`, in-plane rotations `rz_a`/`rz_b`, and out-of-plane perspective homography tilts `tilt_x`/`tilt_y`) under the standard American Chemical Society stylesheet (`acs1996`).
+* **IUPAC-Informed Algorithmic Depiction Engine**: All structures are curated from [PubChem](https://pubchem.ncbi.nlm.nih.gov/) (cross-verified against [Wikidata](https://www.wikidata.org/)) and laid out through a multi-seed 2D/3D-projection search and repair pipeline aligned with IUPAC 2006/2008 graphical standards—preserving CIP stereocentres and configured $E/Z$ double bonds, resolving spiro-epoxide and terminal-label collisions, and rendering via **ChemDraw** without destructive auto-cleaning.
+* **Denominator-Calibrated Stereochemical Metrics**: Rather than conflating achiral or alkene-free molecules with stereochemical matches or failures, v2.0 restricts tetrahedral (`Chiral %`) and double-bond (`E/Z %`) accuracy denominators strictly to compounds possessing assigned tetrahedral stereocentres or configurated $E/Z$ double bonds, respectively, alongside compound-weighted $E/Z$-blind chirality (`Chirality No-E/Z %`).
 
 ### 1.3 Scoring Metrics
-Evaluation is conducted on a stratified, seeded held-out slice (`random_seed42`). Because organic molecules and multi-centre coordination complexes obey fundamentally different representation rules in cheminformatics, they are scored separately:
-
-* **Organic Headline (`Organic Exact %`)**: Computed at the compound level (mean accuracy across each compound's evaluated depictions) using a stratified weighting scheme that down-weights compact baseline structures so that complex scaffolds govern the headline metric. A prediction is scored as `Exact` if and only if its RDKit canonical isomeric SMILES is identical to the ground truth.
-* **Chirality-Kept Match (`Chirality %`)**: Evaluates canonical SMILES identity after stripping double-bond $E/Z$ (`/` and `\`) directional markers while strictly retaining all tetrahedral (`@`/`@@`) stereocentres. Several OCSR pipelines intentionally omit or strip alkene $E/Z$ stereochemistry during post-processing; comparing `Organic Exact %` against `Chirality %` isolates $E/Z$ convention penalties from true tetrahedral inversion errors.
-* **Tautomer Match (`Tautomer %`)**: Evaluates canonical-tautomer InChIKey equivalence via RDKit `TautomerEnumerator` (applied to structures up to 80 heavy atoms), ensuring that valid prototropic tautomers (e.g., keto–enol or amide–imidol forms) are not penalized as topological errors.
+* **Organic Headline (`Organic Exact %`)**: Computed at the compound level (mean accuracy across all five evaluated geometric variants per compound) using a stratified weighting scheme that down-weights compact baseline structures so that complex scaffolds govern the headline metric. A prediction is scored as `Exact` if and only if its RDKit canonical isomeric SMILES is identical to the ground truth.
+* **Tetrahedral Chirality (`Chiral %`) & Double-Bond Geometry (`E/Z %`)**: Evaluated exclusively over compounds bearing assigned tetrahedral stereocentres (`Chiral %`) or configurated $E/Z$ alkenes (`E/Z %`).
+* **Chirality-Kept Match (`Chirality No-E/Z %`)**: Evaluates canonical SMILES identity across all organic compounds after stripping double-bond $E/Z$ (`/` and `\`) directional markers while strictly retaining all tetrahedral (`@`/`@@`) stereocentres, isolating $E/Z$ convention penalties from tetrahedral inversion errors.
+* **Tautomer Match (`Tautomer %`)**: Evaluates canonical-tautomer InChIKey equivalence via RDKit `TautomerEnumerator` on structures within the tractable heavy-atom enumeration bound, ensuring that valid prototropic tautomers (e.g., keto–enol or amide–imidol forms) are not penalized as topological errors.
 * **Constitutional Connectivity (`Connectivity %`)**: Stereo-blind canonical SMILES identity (equivalent to matching the 14-character InChIKey skeleton block on organic structures), measuring pure 2D molecular graph topology recovery.
-* **Structural Similarity (`ECFP4 Tanimoto`)**: Mean Morgan fingerprint (radius 2, 2048 bits) Tanimoto similarity over all organic depictions (assigning $0.0$ to unparseable outputs), quantifying partial structural recovery on near-miss predictions.
-* **Coordination Ligand-Skeleton Score (`Coordination Parts %`)**: Multi-centre haptic ($\eta^5$-Cp, $\eta^6$-arene) and dative coordination bonding has no unique canonical SMILES representation, and standard InChI normalization frequently corrupts metal–ligand connectivity. Coordination depictions are therefore authored as explicit complexes and evaluated via a canonical **part key** (`coord_depict.py`) that verifies: (i) the identity of each metal centre and its non-haptic $\sigma$/chelate coordination sphere, and (ii) the charge- and radical-normalized canonical skeletons of all coordinated ligands (e.g., aromatic, anionic, and radical cyclopentadienyl encodings match one another, whereas reduced cyclopentane or uncoordinated floating fragments are rejected).
+* **Structural Similarity (`ECFP4 Tanimoto %`)**: Compound-weighted mean Morgan fingerprint (radius 2, 2048 bits) Tanimoto similarity over all organic depictions (assigning $0.0$ to unparseable outputs), quantifying partial structural recovery on near-miss predictions.
+* **Coordination Ligand-Skeleton Score (`Coordination Parts %`)**: Evaluated on the dedicated coordination module via a canonical **part key** (`coord_depict.py`) that verifies each metal centre, its non-haptic $\sigma$/chelate coordination sphere, and the charge-/radical-normalized canonical skeletons of all coordinated ligands.
 
 ---
 
 ## 2. Benchmark Results (11 Models)
 
-### 2.1 Main Leaderboard
+### 2.1 v2.0 Organic Leaderboard & Longitudinal Comparison with v1.1
 We evaluate 11 open-weights OCSR models spanning three primary architectural paradigms:
-1. **1D Chemical Line-Notation Autoregressive Decoders** (**DECIMER**, **COMO**, **MolParser-Mobile-V2**, **MolSight**, **MolSight-stereo**, **OCSRGlyph**);
-2. **2D Molecular Graph Reconstruction Hybrids** (**MolNexTR**, **MolScribe**, **MolGrapher**);
+1. **1D Chemical Line-Notation Autoregressive Decoders** (**DECIMER**, **COMO**, **MolParser-Mobile-V2**, **OCSRGlyph**, **MolSight**, **MolSight-stereo**);
+2. **2D Molecular Graph Reconstruction Hybrids** (**MolScribe**, **MolNexTR**, **MolGrapher**);
 3. **Vision–Language Models (VLMs)** (**TinyChemVL**, **MarkushGlyph**).
 
-| Model | Paradigm & Backbone | Org. Valid % | **Organic Exact %** | Chirality ($E/Z$-Blind) % | Tautomer % | Connectivity % | ECFP4 Tanimoto % | **Coord. Parts %** | Published Patent Exact % |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| **DECIMER** (v2.7.1) | EfficientNetV2 + Transformer $\to$ **SELFIES** | 93.0 | **58.6** | **59.2** | **58.2** | **71.0** | **87.2** | **40.8** | ~90–96 (DECIMER) |
-| **MolNexTR** | ConvNeXt + ViT + **Graph/SMILES** Decoder | 68.3 | 41.1 | 43.5 | 42.4 | 49.7 | 61.9 | 6.6 | 93.8 (USPTO) |
-| **MolScribe** | Swin-B + **Graph** Autoregressive Decoder | 68.2 | 41.1 | 44.0 | 44.1 | 53.8 | 63.8 | 3.1 | 93.3 (USPTO) |
-| **COMO** (Tanimoto-RL) | Swin-B + 6L Decoder + Graph Stereo Postproc | 74.0 | 35.5 | 50.3 | 38.5 | 55.6 | 68.5 | 5.3 | 96.1 (USPTO-10K) |
-| **MolParser-Mobile-V2** | ViT-Tiny + 6L Decoder (10.0M) $\to$ **E-SMILES** | 79.0 | 27.9 | 28.2 | 29.2 | 41.9 | 65.9 | 3.9 | 90.9 (USPTO) |
-| **MolSight** | EfficientViT-L1 + 6L Decoder (67.5M, Char+Edge) | 74.3 | 20.2 | 20.3 | 21.0 | 40.2 | 61.9 | 27.2 | 91.2 (USPTO) |
-| **MolSight-stereo** | EfficientViT-L1 + 6L Decoder + Stereo-GRPO LoRA | 76.2 | 19.1 | 19.1 | 20.3 | 38.0 | 61.4 | 37.7 | — |
-| **OCSRGlyph** | Swin-B/384 + Transformer Decoder $\to$ **SMILES** | 72.2 | 18.0 | 20.9 | 20.2 | 42.4 | 62.7 | 30.3 | 93.8 (USPTO-5719) |
-| **TinyChemVL** | InternViT-6B + Qwen2.5-3B (~9B VLM) $\to$ **SMILES** | **93.5** | 14.6 | 17.2 | 16.9 | 24.1 | 52.1 | 3.5 | — |
-| **MolGrapher** | ResNet-18 Keypoints + **GCN** Classifier + OCR | 83.0 | 6.1 | 8.9 | 7.2 | 33.1 | 49.5 | 0.0 | ~92 (USPTO-10K) |
-| **MarkushGlyph** | Qwen3.5-2B-Base + LoRA VLM $\to$ **CXSMILES** | 58.2 | 5.2 | 5.6 | 8.0 | 17.5 | 39.1 | 14.5 | — |
+| Model | Paradigm & Backbone | Org. Valid % | **v2.0 Organic Exact %** (95% CI) | v1.1 Exact % | **Connectivity %** (95% CI) | Chiral % | $E/Z$ % | Chirality (No-$E/Z$) % | Tautomer % | ECFP4 Tanimoto % | Pose SD % |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **DECIMER** (v2.7.1) | EfficientNetV2 + Transformer $\to$ **SELFIES** | **95.4** | **59.1** (±3.4) | 58.6 | **78.4** (±2.8) | **61.2** | **66.1** | **62.1** | **64.3** | **90.5** | 0.64 |
+| **MolScribe** | Swin-B + **Graph** Autoregressive Decoder | 74.0 | 45.1 (±3.3) | 41.1 | 63.5 (±3.2) | 50.9 | 39.0 | 51.6 | 52.1 | 70.3 | 1.33 |
+| **MolNexTR** | ConvNeXt + ViT + **Graph/SMILES** Decoder | 76.0 | 44.0 (±3.2) | 41.1 | 59.4 (±3.1) | 49.0 | 35.3 | 49.5 | 49.0 | 69.7 | 0.62 |
+| **COMO** (Tanimoto-RL) | Swin-B + 6L Decoder + Graph Stereo Postproc | 78.3 | 37.5 (±3.3) | 35.5 | 66.8 (±3.2) | 56.4 | 0.0 | 57.3 | 42.8 | 75.2 | **0.31** |
+| **MolParser-Mobile-V2** | ViT-Tiny + 6L Decoder (10.0M) $\to$ **E-SMILES** | 80.1 | 25.6 (±2.8) | 27.9 | 43.9 (±3.2) | 26.7 | 26.3 | 27.7 | 29.8 | 66.9 | 0.71 |
+| **OCSRGlyph** | Swin-B/384 + Transformer Decoder $\to$ **SMILES** | 77.1 | 19.2 (±2.5) | 18.0 | 49.3 (±3.3) | 21.0 | 19.8 | 23.5 | 22.7 | 68.4 | 0.59 |
+| **MolSight** | EfficientViT-L1 + 6L Decoder (67.5M, Char+Edge) | 77.8 | 19.0 (±2.6) | 20.2 | 45.2 (±3.4) | 18.7 | 25.8 | 20.9 | 22.7 | 66.6 | 0.46 |
+| **MolSight-stereo** | EfficientViT-L1 + 6L Decoder + Stereo-GRPO LoRA | 79.0 | 18.2 (±2.6) | 19.1 | 44.5 (±3.4) | 18.0 | 25.3 | 20.3 | 22.2 | 66.6 | 0.52 |
+| **MolGrapher** | ResNet-18 Keypoints + **GCN** Classifier + OCR | 85.5 | 8.1 (±1.8) | 6.1 | 44.2 (±3.3) | 6.5 | 9.8 | 9.6 | 10.1 | 57.9 | 0.63 |
+| **TinyChemVL** | InternViT-6B + Qwen2.5-3B (~9B VLM) $\to$ **SMILES** | 91.4 | 7.2 (±1.7) | 14.6 | 13.8 (±2.2) | 6.9 | 1.8 | 8.2 | 8.7 | 46.3 | 0.43 |
+| **MarkushGlyph** | Qwen3.5-2B-Base + LoRA VLM $\to$ **CXSMILES** | 58.7 | 2.7 (±1.0) | 5.2 | 13.6 (±2.3) | 1.4 | 3.0 | 3.0 | 4.6 | 38.7 | 0.36 |
 
-> **Note on Compact vs. Complex Scaffolds:** On the compact organic baseline stratum within the benchmark, models achieve substantially higher exact-match rates (**DECIMER** 78.0%, **MolParser-Mobile-V2** 67.4%, **MolScribe** 62.9%, **OCSRGlyph** 58.3%, **COMO** 53.8%, **MolNexTR** 53.0%, **MolSight-stereo** 52.3%, **MolSight** 49.2%, **MolGrapher** 43.2%, **TinyChemVL** 40.9%, **MarkushGlyph** 29.5%). Down-weighting this easy stratum exposes the true performance drop on complex chemical structures, where every evaluated model falls 35–85 percentage points below its published patent-benchmark accuracy.
-
----
-
-### 2.2 Performance Across Structural Complexity Regimes
-Table 2 reports model accuracy across individual structural difficulty tags on the organic evaluation subset (`Exact % / Connectivity %`).
-
-| Model | Bridged Rings | Spiro Centres | Macrocycles | Polycyclic Cages | Stereo-Dense | Large Molecules | Bridged + Stereo-Dense |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| **DECIMER** | **44.8 / 58.9** | **48.0 / 64.9** | **41.4 / 60.9** | 14.3 / **34.9** | **49.5 / 63.4** | **35.6 / 48.9** | **36.6 / 51.2** |
-| **MolNexTR** | 30.3 / 37.4 | 31.3 / 44.8 | 16.4 / 21.3 | 17.8 / 20.9 | 29.2 / 38.1 | 8.3 / 13.8 | 21.9 / 29.4 |
-| **MolScribe** | 28.9 / 39.4 | 26.9 / 45.8 | 22.9 / 31.5 | **22.5** / 25.6 | 30.2 / 43.2 | 12.4 / 15.5 | 17.9 / 31.0 |
-| **COMO** | 23.1 / 39.0 | 27.1 / 44.6 | 8.1 / 44.4 | 10.9 / 22.5 | 25.1 / 45.9 | 4.0 / 25.3 | 11.7 / 31.0 |
-| **MolParser-Mobile-V2** | 16.8 / 30.6 | 12.4 / 30.3 | 9.5 / 17.4 | 3.9 / 7.4 | 12.5 / 27.6 | 1.7 / 3.7 | 4.9 / 18.2 |
-| **MolSight** | 9.6 / 27.6 | 3.0 / 23.5 | 6.2 / 22.0 | 4.3 / 10.1 | 8.0 / 28.0 | 3.2 / 6.0 | 3.4 / 19.2 |
-| **MolSight-stereo** | 7.8 / 24.8 | 3.6 / 19.9 | 4.6 / 17.1 | 2.7 / 11.2 | 6.0 / 24.0 | 2.0 / 4.3 | 1.9 / 14.1 |
-| **OCSRGlyph** | 10.7 / 30.7 | 6.2 / 33.1 | 3.9 / 19.7 | 1.9 / 9.7 | 8.7 / 31.1 | 1.7 / 4.0 | 3.1 / 21.4 |
-| **TinyChemVL** | 8.9 / 16.2 | 7.6 / 11.8 | 3.5 / 8.3 | 3.9 / 8.1 | 6.3 / 12.8 | 0.9 / 2.9 | 1.9 / 9.2 |
-| **MolGrapher** | 6.0 / 24.6 | 2.4 / 22.1 | 0.9 / 12.3 | 0.0 / 5.8 | 1.7 / 19.7 | 0.3 / 3.7 | 1.0 / 16.5 |
-| **MarkushGlyph** | 1.8 / 8.2 | 0.0 / 2.2 | 0.0 / 2.5 | 2.3 / 2.7 | 0.5 / 6.1 | 0.0 / 0.0 | 0.0 / 3.7 |
+> **Statistical Resolution & Compact-Stratum Calibration:** Confidence intervals are computed via 10,000 paired compound-level bootstrap resamples. Out of all 55 pairwise model comparisons on v2.0 `Organic Exact %`, **50 pairs (90.9%) are statistically significant at $\alpha = 0.05$ after Holm step-down correction** (up from 45/55 in v1.1). Only five pairs remain statistically indistinguishable: **MolScribe** vs. **MolNexTR** ($\Delta = +1.1\%$, $p_{\text{Holm}} = 1.00$), the **OCSRGlyph** / **MolSight** / **MolSight-stereo** cluster ($\Delta \le 1.0\%$, $p_{\text{Holm}} = 1.00$), and **MolGrapher** vs. **TinyChemVL** on exact match ($\Delta = +0.9\%$, $p_{\text{Holm}} = 1.00$; though **MolGrapher** exceeds **TinyChemVL** by $+30.4$ points on connectivity). On the compact organic baseline stratum within v2.0, models achieve much higher exact accuracy (**DECIMER** 67.1%, **MolScribe** 58.8%, **MolParser-Mobile-V2** 54.1%, **COMO** 50.6%, **MolNexTR** 47.1%, **OCSRGlyph** 41.2%, **MolGrapher** 41.2%, **MolSight** 35.3%, **MolSight-stereo** 35.3%, **TinyChemVL** 32.9%, **MarkushGlyph** 22.4%), confirming that down-weighting simple structures is essential to prevent easy drug-like molecules from masking complex-scaffold failure modes.
 
 ---
 
-### 2.3 Error Taxonomy & Stereochemical Fidelity
-To disentangle syntactic generation failures, topological graph errors, and stereochemical misassignments, Table 3 partitions $100\%$ of organic image predictions into mutually exclusive outcome categories, alongside conditional stereochemical precision ($\text{Exact} / \text{Connectivity}$) and near-miss similarity on topologically incorrect but valid predictions.
+### 2.2 Performance Across Structural Complexity Regimes (v2.0)
+Table 2 reports compound-weighted accuracy across individual structural difficulty tags on the v2.0 organic corpus (`Exact % / Connectivity %`).
 
-| Model | Exact Match % | $E/Z$ Stereo Loss % | Tetrahedral Stereo Loss % | Skeleton / Topo Error % | Unparseable / Invalid % | Conditional Stereo Precision % | Skeleton Error Mean Tanimoto % |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| **DECIMER** | **59.8** | 0.6 | 11.1 | 21.6 | 6.9 | 83.6 | **72.5** |
-| **MolNexTR** | 41.8 | 2.4 | 5.7 | 18.8 | 31.4 | **83.8** | 64.1 |
-| **MolScribe** | 42.4 | 2.9 | 9.0 | **14.2** | 31.4 | 78.0 | 66.2 |
-| **COMO** | 36.6 | 14.3 | **5.0** | 17.9 | 26.1 | 65.4 *(91.0 no-$E/Z$)* | 69.8 |
-| **MolParser-Mobile-V2** | 30.3 | 0.4 | 12.7 | 36.2 | 20.4 | 69.8 | 62.1 |
-| **MolSight** | 22.0 | 0.1 | 19.3 | 33.4 | 25.2 | 53.1 | 61.4 |
-| **MolSight-stereo** | 21.1 | 0.1 | 18.1 | 37.6 | 23.1 | 53.7 | 58.8 |
-| **OCSRGlyph** | 20.4 | 2.8 | 20.6 | 29.4 | 26.8 | 46.6 *(53.0 no-$E/Z$)* | 64.2 |
-| **TinyChemVL** | 16.2 | 2.6 | 7.1 | 67.7 | **6.5** | 62.5 | 38.7 |
-| **MolGrapher** | 8.4 | 2.8 | 23.5 | 49.1 | 16.2 | 24.2 | 30.1 |
-| **MarkushGlyph** | 6.6 | 0.4 | 12.5 | 40.5 | 40.0 | 33.9 | 48.4 |
+| Model | Bridged Rings | Spiro Centres | Macrocycles | Polycyclic Cages | Stereo-Dense | Large Molecules | Configured $E/Z$ | Bridged + Stereo-Dense |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **DECIMER** | **44.7 / 69.2** | **50.4 / 74.6** | **43.1 / 67.2** | **25.8 / 55.7** | **55.0 / 76.2** | **42.1 / 64.2** | **46.9 / 73.8** | **39.2 / 67.5** |
+| **MolScribe** | 29.2 / 46.9 | 29.9 / 50.1 | **25.3** / 53.4 | 17.5 / 28.3 | **40.5** / 59.6 | 27.0 / 45.3 | **30.4** / 58.7 | 23.6 / 43.0 |
+| **MolNexTR** | **30.7** / 46.5 | **33.4** / 49.7 | 24.0 / 51.3 | **18.1 / 28.6** | 38.8 / 56.1 | **27.4** / 45.6 | 28.0 / 55.8 | **26.1 / 44.1** |
+| **COMO** | 19.1 / **48.2** | 28.8 / **50.4** | 7.3 / **60.8** | 7.1 / **31.8** | 31.5 / **63.1** | 20.1 / **50.5** | 0.0 / **66.9** | 13.3 / 43.5 |
+| **MolParser-Mobile-V2** | 14.0 / 30.2 | 14.7 / 34.6 | 13.8 / 26.6 | 4.7 / 10.6 | 18.1 / 37.3 | 5.4 / 11.5 | 15.3 / 32.0 | 8.5 / 24.8 |
+| **OCSRGlyph** | 8.0 / 33.4 | 11.7 / 35.6 | 8.7 / 36.9 | 3.1 / 12.7 | 12.3 / 44.6 | 9.4 / 22.7 | 8.8 / 44.8 | 3.8 / 29.7 |
+| **MolSight** | 9.0 / 29.2 | 8.5 / 31.3 | 7.4 / 35.2 | 1.8 / 6.6 | 12.1 / 39.3 | 7.8 / 19.2 | 11.5 / 38.2 | 5.2 / 24.5 |
+| **MolSight-stereo** | 8.7 / 28.7 | 8.5 / 29.5 | 8.1 / 34.0 | 2.5 / 8.2 | 10.5 / 38.5 | 6.1 / 16.7 | 12.1 / 37.1 | 4.9 / 24.0 |
+| **MolGrapher** | 4.5 / 30.8 | 6.2 / **35.7** | 1.4 / 32.1 | 1.0 / 17.0 | 4.0 / 38.6 | 1.7 / 14.3 | 1.8 / 36.2 | 1.3 / 27.0 |
+| **TinyChemVL** | 3.9 / 6.7 | 2.9 / 7.1 | 0.0 / 2.2 | 0.9 / 1.1 | 4.1 / 8.7 | 0.6 / 1.7 | 0.2 / 5.3 | 1.2 / 4.1 |
+| **MarkushGlyph** | 0.7 / 4.1 | 0.8 / 5.7 | 0.0 / 3.9 | 0.3 / 0.5 | 0.2 / 8.2 | 0.0 / 1.8 | 0.6 / 9.9 | 0.0 / 2.6 |
+
+---
+
+### 2.3 Error Taxonomy & Stereochemical Fidelity (v2.0)
+To disentangle syntactic generation failures, topological graph errors, and stereochemical misassignments, Table 3 partitions $100\%$ of v2.0 organic image predictions into five mutually exclusive outcome categories, alongside conditional stereochemical precision ($\text{Exact} / \text{Connectivity}$ and its $E/Z$-blind counterpart), near-miss similarity on topologically incorrect but valid predictions, and median heavy-atom count deviation $|\Delta N_{\text{heavy}}|$.
+
+| Model | Exact Match % | $E/Z$ Stereo Loss % | Tetrahedral / Both Stereo Loss % | Skeleton / Topo Error % | Unparseable / Invalid % | Conditional Stereo Precision % *(No-$E/Z$)* | Skeleton Error Mean Tanimoto % | Median $|\Delta N_{\text{heavy}}|$ (Skel. Err.) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **DECIMER** | **59.2** | 3.1 | 16.0 | 17.2 | **4.5** | **75.6** *(79.6)* | 70.0 | **1.0** |
+| **MolScribe** | 45.3 | 6.4 | 11.7 | **10.6** | 26.0 | 71.5 *(81.6)* | 63.1 | **1.0** |
+| **MolNexTR** | 44.0 | 5.5 | 9.7 | 16.8 | 24.0 | 74.4 *(83.6)* | 60.8 | **1.0** |
+| **COMO** | 37.7 | 19.7 | **9.3** | 11.4 | 21.9 | 56.5 *(**86.0**)* | **73.1** | **1.0** |
+| **MolParser-Mobile-V2** | 26.1 | 2.1 | 15.9 | 36.1 | 19.8 | 59.1 *(63.9)* | 63.6 | 2.0 |
+| **OCSRGlyph** | 19.6 | 4.3 | 25.4 | 27.9 | 22.8 | 39.8 *(48.5)* | 68.4 | **1.0** |
+| **MolSight** | 19.3 | 1.9 | 23.9 | 33.0 | 21.9 | 42.7 *(46.9)* | 65.1 | 2.0 |
+| **MolSight-stereo** | 18.5 | 2.1 | 23.9 | 34.8 | 20.7 | 41.5 *(46.3)* | 63.7 | 2.0 |
+| **MolGrapher** | 8.7 | 1.7 | 34.0 | 41.4 | 14.2 | 19.5 *(23.3)* | 33.0 | **1.0** |
+| **TinyChemVL** | 7.6 | 1.1 | 5.6 | 77.2 | 8.5 | 53.2 *(60.9)* | 42.0 | 5.0 |
+| **MarkushGlyph** | 3.0 | 0.4 | 10.6 | 45.0 | 41.0 | 21.5 *(24.7)* | 55.4 | 2.0 |
 
 ---
 
 ### 2.4 Coordination & Organometallic Recognition by Bonding Archetype
-Table 4 disaggregates coordination subset performance (`Coordination Parts %` / `Valid %`) across the three major organometallic bonding archetypes in OCSR-complex.
+Table 4 reports performance (`Coordination Parts %` / `Valid %`) on the dedicated coordination and organometallic benchmark track across the three major bonding archetypes.
 
 | Model | $\eta^5/\eta^6$ Sandwich Metallocenes | $\sigma$-Bonded / Chelate Complexes | Metallated Macrocyclic Cavities | Overall Coord. Parts % |
 |---|---:|---:|---:|---:|
@@ -121,31 +125,33 @@ Table 4 disaggregates coordination subset performance (`Coordination Parts %` / 
 
 ---
 
-## 3. Key Scientific Findings
+## 3. Key Scientific Findings (v1.1 $\to$ v2.0 Synthesis)
 
-1. **Chemical Complexity Dominates Visual Style and Geometric Perturbation.**  
-   Across all seven journal stylesheets and five geometric variants (in-plane rotations and perspective homography tilts), model accuracy varies by only a few percentage points (e.g., **DECIMER** standard deviation across stylesheets is $2.2\%$; **MolNexTR** is $3.0\%$; **MolScribe** is $3.2\%$). By contrast, increasing heavy-atom count beyond 60 or introducing bridged polycyclic cages and macrocycles causes accuracy to collapse by $40\text{--}80$ percentage points. Modern OCSR backbones are largely invariant to typographic conventions and mild camera perspective; **their bottleneck is chemical topology and stereochemical reasoning**.
+1. **Invariance to Pose Perturbation vs. Vulnerability to Topological Entanglement.**  
+   Across v1.1 (seven publisher stylesheets) and v2.0 (exhaustive five-pose evaluation per compound), typographic and geometric perturbations have minimal impact on recognition accuracy: in v2.0, the standard deviation across in-plane rotations (`rz_a`, `rz_b`) and out-of-plane perspective tilts (`tilt_x`, `tilt_y`) is $\le 0.71\%$ for 10 of the 11 models ($0.31\%$ for **COMO**, $0.46\%$ for **MolSight**, $0.62\%$ for **MolNexTR**, $0.64\%$ for **DECIMER**, and $1.33\%$ for **MolScribe**). By contrast, transitioning from compact organic scaffolds to polycyclic cages or macrocycles induces a $30\text{--}60$ percentage-point collapse across every architecture. Modern OCSR vision encoders are effectively pose- and font-invariant; **their fundamental bottleneck is chemical graph topology and stereochemical decoding**.
 
 2. **Grammar-Free 1D Representation (SELFIES) Prevents Catastrophic Syntax Collapse on Large Scaffolds.**  
-   **DECIMER** leads the organic benchmark by a wide margin ($58.6\%$ exact, $71.0\%$ connectivity, $87.2\%$ mean ECFP4 Tanimoto). Its advantage is most pronounced on large molecules ($\ge 60$ heavy atoms: $35.6\%$ exact vs. $\le 12.4\%$ for all other models) and macrocycles ($41.4\%$ exact vs. $\le 22.9\%$). Whereas standard SMILES decoders and 2D graph constructors suffer severe syntactic failure on complex cages and large rings (unparseable rates reaching $31.4\%$ for **MolScribe**/**MolNexTR** and $25\text{--}40\%$ for **MolSight**/**OCSRGlyph**/**MarkushGlyph**), **DECIMER**'s SELFIES token stream guarantees syntactic validity on $93.0\%$ of organic depictions, turning potential syntax crashes into high-similarity near-misses ($72.5\%$ mean Tanimoto on skeleton errors).
+   **DECIMER** leads the v2.0 organic benchmark by a decisive margin ($59.1\%$ exact, $78.4\%$ connectivity, $64.3\%$ tautomer, $90.5\%$ compound-weighted ECFP4 Tanimoto). When the depiction pipeline was upgraded in v2.0 to resolve small-ring and spiro-epoxide congestion and use native 3D Schlegel/PCA projections for bridged cages, **DECIMER**'s connectivity recovery surged by $+7.4$ points over v1.1 ($71.0\% \to 78.4\%$), and its polycyclic cage accuracy nearly doubled ($14.3\% \to 25.8\%$ exact; $34.9\% \to 55.7\%$ connectivity). Whereas SMILES sequence decoders and 2D graph constructors suffer $19.8\text{--}41.0\%$ unparseable rates on complex natural products, **DECIMER**'s SELFIES representation guarantees $95.4\%$ syntactic validity, converting potential syntax crashes into high-similarity near-misses ($70.0\%$ mean Tanimoto on skeleton errors).
 
-3. **2D Graph Reconstruction Excels at Local Stereochemistry and Cage Topology—When the Graph Parses.**  
-   Hybrid 2D graph models (**MolNexTR** $41.1\%$ and **MolScribe** $41.1\%$) tie for second place on the organic headline and outperform all non-SELFIES 1D sequence models. Notably, **MolScribe** achieves the highest exact accuracy of *all* 11 models on polycyclic cages ($22.5\%$, surpassing **DECIMER** at $14.3\%$ and **MolNexTR** at $17.8\%$) and the lowest topological skeleton error rate overall ($14.2\%$). Furthermore, **MolNexTR** ($83.8\%$) and **DECIMER** ($83.6\%$) achieve the highest conditional stereochemical precision once connectivity is recovered. However, purely bottom-up keypoint-and-GCN pipelines without end-to-end sequence recovery (**MolGrapher**, $6.1\%$ exact, $33.1\%$ connectivity) fail whenever bond crossings or macrocyclic layouts disconnect the predicted graph—emitting a single-carbon sentinel (`C`) on $25.4\%$ of the evaluation slice ($59\%$ of organometallic drawings and $88\%$ of structures exceeding 120 heavy atoms).
+3. **2D Graph Reconstruction Hybrids Benefit Strongly from Depiction Repair and Lead on Skeleton Fidelity.**  
+   Expanding the organic corpus and refining 2D bond-clearance geometry in v2.0 elevated both hybrid graph models—**MolScribe** ($41.1\% \to 45.1\%$ exact; $53.8\% \to 63.5\%$ connectivity) and **MolNexTR** ($41.1\% \to 44.0\%$ exact; $49.7\% \to 59.4\%$ connectivity)—with particularly large gains on large molecules ($\ge 60$ heavy atoms: $8.3\text{--}12.4\% \to 27.0\text{--}27.4\%$ exact) and macrocycles ($16.4\text{--}22.9\% \to 24.0\text{--}25.3\%$ exact). **MolScribe** achieves the lowest topological skeleton error rate of all 11 models ($10.6\%$), while **COMO** ($11.4\%$) and **MolNexTR** ($16.8\%$) follow closely. Conversely, purely bottom-up keypoint-and-GCN construction without sequence-level recovery (**MolGrapher**, $8.1\%$ exact, $44.2\%$ connectivity) remains vulnerable to bond crossings and large macrocycles: whenever a predicted graph disconnects into multiple fragments, **MolGrapher** falls back to a single-carbon sentinel (`C`) on $16.9\%$ of all v2.0 depictions ($24.3\%$ of cages and macrocycles, $39.9\%$ of large molecules, and $83.8\%$ of structures exceeding 100 heavy atoms).
 
-4. **Disentangling Alkene $E/Z$ Conventions from Tetrahedral Chirality Reveals Hidden Strengths.**  
-   For several 1D sequence models (**OCSRGlyph**, **MolSight**, **MolGrapher**), stereochemical errors account for roughly half of all failures on topologically correct skeletons. However, decomposing stereochemical loss into double-bond $E/Z$ loss versus tetrahedral `@`/`@@` loss (Table 3) exposes a critical evaluation subtlety: **COMO**'s official post-processor reconstructs tetrahedral chirality from its auxiliary graph predictions while intentionally stripping cis/trans markers (`ignore_cistrans=True`). Under $E/Z$-blind tetrahedral evaluation (`Chirality %`), **COMO** surges by $+14.9$ percentage points ($35.5\% \to 50.3\%$), overtaking both **MolScribe** ($44.0\%$) and **MolNexTR** ($43.5\%$) and achieving the lowest tetrahedral stereocentre loss in the benchmark ($5.0\%$, or $91.0\%$ conditional tetrahedral precision). Similarly, **OCSRGlyph** gains $+2.9$ points ($18.0\% \to 20.9\%$) under its native chirality-kept convention.
+4. **Denominator-Calibrated $E/Z$ and Tetrahedral Metrics Expose Post-Processing Trade-Offs.**  
+   By evaluating `Chiral %` and `E/Z %` strictly on compounds carrying those respective stereochemical features, v2.0 cleanly separates tetrahedral parity recovery from alkene geometry:
+   * **COMO**'s official post-processor transfers tetrahedral wedges/hashes from its auxiliary graph head while intentionally stripping alkene cis/trans markers (`ignore_cistrans=True`), yielding **$0.0\%$** on `E/Z %` and incurring a $19.7\%$ pure $E/Z$ stereo loss across all images. Yet on tetrahedral centres, **COMO** achieves **$56.4\%$ `Chiral %`** (second only to **DECIMER** at $61.2\%$, and ahead of **MolScribe** $50.9\%$ and **MolNexTR** $49.0\%$), jumping by $+19.8$ points under $E/Z$-blind evaluation ($37.5\% \to 57.3\%$) and reaching the **highest conditional no-$E/Z$ stereo precision ($86.0\%$)** and **highest skeleton-error Tanimoto similarity ($73.1\%$)** in the benchmark.
+   * Among 1D SMILES decoders, **MolSight** ($25.8\%$ `E/Z %`) and **MolParser-Mobile-V2** ($26.3\%$ `E/Z %`) retain double-bond geometry substantially better than **OCSRGlyph** ($19.8\%$ `E/Z %`), whereas **OCSRGlyph** recovers more constitutional skeletons ($49.3\%$ vs. $45.2\%$ and $43.9\%$ connectivity).
 
-5. **Post-Training Specialization Does Not Automatically Transfer Across Chemical Domains.**  
-   Comparing paired checkpoints highlights the fragility of narrow domain adaptation:
-   * **MolSight vs. MolSight-stereo**: Post-training **MolSight** with Group Relative Policy Optimization (GRPO) LoRA on 200k synthetic stereoisomers (`stereo_grpo_10_2.pth`) slightly increases syntactic validity ($74.3\% \to 76.2\%$) and compact-molecule accuracy ($49.2\% \to 52.3\%$), and boosts metallocene recognition ($27.2\% \to 37.7\%$ coordination parts), but *degrades* organic exact accuracy ($20.2\% \to 19.1\%$), stereo-dense accuracy ($8.0\% \to 6.0\%$), and behind-the-bridge occlusion recovery.
-   * **OCSRGlyph vs. MarkushGlyph**: Fine-tuning a VLM for patent Markush CXSMILES parsing (**MarkushGlyph**) causes severe catastrophic forgetting on complex natural products ($5.2\%$ organic exact, $0.0\%$ on spiro, macrocyclic, and large structures).
-   * **General-Purpose VLMs (TinyChemVL)**: Despite a $\sim 9\text{B}$ parameter count (InternViT-6B + Qwen2.5-3B) and the highest syntactic validity ($93.5\%$), **TinyChemVL** achieves only $14.6\%$ organic exact accuracy and $24.1\%$ connectivity, frequently hallucinating plausible drug-like SMILES with the wrong atom count (mean Tanimoto $38.7\%$ on skeleton errors; median $|\Delta N_{\text{heavy}}| = 5$ atoms vs. $1$ atom for specialized OCSR models).
+5. **Scaling the Complex Corpus Exposes Severe Generalization Limits in VLMs and Narrow Post-Training.**  
+   Longitudinal comparison from v1.1 to v2.0 reveals that while specialized OCSR architectures maintained or improved their accuracy on the expanded v2.0 corpus, general-purpose and Markush-specialized VLMs degraded by roughly half:
+   * **TinyChemVL** ($\sim 9\text{B}$ VLM) dropped from $14.6\% \to 7.2\%$ exact and $24.1\% \to 13.8\%$ connectivity ($0.0\%$ exact on macrocycles and $0.2\%$ on configured $E/Z$ alkenes). Despite $91.4\%$ syntactic validity, $77.2\%$ of its outputs are topological hallucinations with a median heavy-atom count error of $|\Delta N_{\text{heavy}}| = 5.0$ atoms (vs. $1.0$ atom for **DECIMER**, **MolScribe**, **MolNexTR**, **COMO**, **OCSRGlyph**, and **MolGrapher**).
+   * **MarkushGlyph** dropped from $5.2\% \to 2.7\%$ exact ($41.0\%$ unparseable, $45.0\%$ skeleton error), confirming that patent Markush CXSMILES fine-tuning induces severe catastrophic forgetting on complex natural product topologies.
+   * **MolSight vs. MolSight-stereo**: Consistent with v1.1, GRPO LoRA post-training on synthetic stereoisomers slightly raises syntactic validity ($77.8\% \to 79.0\%$) and coordination metallocene accuracy ($27.2\% \to 37.7\%$), but reduces organic exact accuracy ($19.0\% \to 18.2\%$, $p_{\text{Holm}} = 1.00$) and stereo-dense scaffold recovery ($12.1\% \to 10.5\%$).
 
 6. **Metallated Macrocyclic Cavities Remain an Unsolved Frontier in OCSR.**  
-   On the redrawn coordination subset, top sequence models successfully parse $\eta^5/\eta^6$ sandwich metallocenes (**DECIMER** $100.0\%$, **MolSight-stereo** $91.7\%$, **OCSRGlyph** $67.9\%$, **MolSight** $64.3\%$), and several models partially recover $\sigma$-bonded/chelate Pt, Rh, Ru, and Co complexes (**OCSRGlyph** and **MarkushGlyph** $33.3\%$; **DECIMER**, **MolParser-Mobile-V2**, and **MolSight-stereo** $25.0\%$). Yet **every single evaluated model scores $0.0\%$ on metallated macrocyclic cavities** (metalloporphyrins, chlorophylls, metallo-phthalocyanines, and cobalamins/corrins)—universal failure caused by dense central $M\text{--}N_4$ coordination bonds intersecting the conjugated macrocycle.
+   On the dedicated coordination track, sequence models accurately parse $\eta^5/\eta^6$ sandwich metallocenes (**DECIMER** $100.0\%$, **MolSight-stereo** $91.7\%$, **OCSRGlyph** $67.9\%$, **MolSight** $64.3\%$) and partially recover $\sigma$-bonded/chelate transition-metal complexes (up to $33.3\%$). However, **all 11 models score $0.0\%$ on metallated macrocyclic cavities** (porphyrins, chlorins, phthalocyanines, corrins) due to dense central $M\text{--}N_4$ coordination bonds intersecting the conjugated macrocycle.
 
-7. **High Cross-Model Complementarity.**  
-   Across the entire evaluation slice, the oracle union of all 11 models solves **$67.6\%$** of all depictions ($72.1\%$ of organic images exact, $81.1\%$ of organic images by connectivity, and $44.7\%$ of coordination depictions by ligand-skeleton `parts`), compared to $53.4\%$ for the single best model (**DECIMER**). Seven different models contribute uniquely solved depictions that all 10 competing models miss (**DECIMER**, **MolScribe**, **TinyChemVL**, **MolNexTR**, **OCSRGlyph**, **COMO**, **MarkushGlyph**, **MolParser-Mobile-V2**, and **MolSight**), demonstrating substantial architectural complementarity between SELFIES sequence decoding, 2D graph reconstruction, and VLM visual perception.
+7. **Substantial Cross-Architecture Complementarity.**  
+   On the v2.0 organic evaluation grid, the oracle union across all 11 models exactly solves **$73.8\%$** of all depictions ($73.8\%$ compound-weighted exact, $85.9\%$ image-level connectivity, and **$80.0\%$** of compounds solved in at least one geometric pose; **$88.8\%$** by connectivity)—surpassing the single best model (**DECIMER**, $59.1\%$) by $+14.7$ percentage points. Nine different models contribute uniquely solved exact predictions that all 10 competing models miss (**DECIMER**, **MolScribe**, **MolNexTR**, **COMO**, **MolSight**, **MolParser-Mobile-V2**, **OCSRGlyph**, **MarkushGlyph**, and **MolSight-stereo**), demonstrating strong complementarity between SELFIES sequence decoding, 2D graph reconstruction, and auxiliary graph-stereo post-processing.
 
 ---
 
@@ -154,14 +160,14 @@ Table 4 disaggregates coordination subset performance (`Coordination Parts %` / 
 All models were evaluated deterministically (greedy decoding, beam size 1) using their official released checkpoints and post-processing pipelines:
 
 * **DECIMER** (`v2.7.1`, [Kohulan/DECIMER-Image_Transformer](https://github.com/Kohulan/DECIMER-Image_Transformer), MIT): Standard TensorFlow SavedModel (`DECIMER.predict_SMILES`), decoding predicted SELFIES tokens into canonical SMILES.
-* **MolNexTR** ([CYF200127/MolNexTR](https://huggingface.co/datasets/CYF200127/MolNexTR), Apache 2.0): Checkpoint `molnextr_best.pth`, scored on its official graph-to-SMILES output.
 * **MolScribe** ([yujieq/MolScribe](https://huggingface.co/yujieq/MolScribe), MIT): Checkpoint `swin_base_char_aux_1m680k.pth`, scored on its official graph-to-SMILES output.
+* **MolNexTR** ([CYF200127/MolNexTR](https://huggingface.co/datasets/CYF200127/MolNexTR), Apache 2.0): Checkpoint `molnextr_best.pth`, scored on its official graph-to-SMILES output.
 * **COMO** ([Keylab/COMO](https://huggingface.co/Keylab/COMO), CC BY-NC 4.0): Tanimoto-reward checkpoint `models/tanimoto/best.pth`. Scored on its official `postprocess` SMILES (which transfers tetrahedral stereocentres from the predicted graph and canonicalizes with cis/trans markers ignored, falling back to `decode_smiles` when graph stereo restoration fails).
 * **MolParser-Mobile-V2** ([UniParser/MolParser-Mobile-V2](https://huggingface.co/UniParser/MolParser-Mobile-V2), CC BY-NC-SA 4.0): 10.00M-parameter checkpoint run in FP16 with `max_length=384`. Scored on the SMILES trunk preceding any E-SMILES `<sep>` or `|` suffix.
-* **MolSight & MolSight-stereo** ([hustvl/MolSight](https://github.com/hustvl/MolSight), [Robert-zwr/MolSight](https://huggingface.co/Robert-zwr/MolSight)): Evaluated on `pubchem_uspto_smiles_edges_10.pth` (`--formats char,edges`) and the Stereo-200k GRPO LoRA checkpoint `stereo_grpo_10_2.pth` (`--lora --formats char`), with upstream functional-group expansion (`_postprocess_smiles`) applied prior to scoring.
 * **OCSRGlyph** (`EdisonScientific/glyph`): Swin-B/384 + Transformer decoder evaluated with default post-processing enabled.
-* **TinyChemVL** (`InternViT-6B + Qwen2.5-3B`): Evaluated in BF16 with `<image>` token splicing and in-place `num_image_token` mutation patched per batch (`tools/predict_tinychemvl.py`).
+* **MolSight & MolSight-stereo** ([hustvl/MolSight](https://github.com/hustvl/MolSight), [Robert-zwr/MolSight](https://huggingface.co/Robert-zwr/MolSight)): Evaluated on `pubchem_uspto_smiles_edges_10.pth` (`--formats char,edges`) and the Stereo-200k GRPO LoRA checkpoint `stereo_grpo_10_2.pth` (`--lora --formats char`), with upstream functional-group expansion (`_postprocess_smiles`) applied prior to scoring.
 * **MolGrapher** ([DS4SD/MolGrapher](https://github.com/DS4SD/MolGrapher), MIT): Evaluated with the `gc_stereo_model` node classifier and `--assign-stereo`, patched via `tools/setup_molgrapher_wsl.py` to run unmodified checkpoints on modern PyTorch/CUDA (`torch 2.11+cu128`) with CPU PaddleOCR caption/label recognition.
+* **TinyChemVL** (`InternViT-6B + Qwen2.5-3B`): Evaluated in BF16 with `<image>` token splicing and in-place `num_image_token` mutation patched per batch (`tools/predict_tinychemvl.py`).
 * **MarkushGlyph** ([EdisonScientific/MarkushGlyph](https://huggingface.co/EdisonScientific/MarkushGlyph), Apache 2.0): LoRA adapter on `Qwen/Qwen3.5-2B-Base` prompted with `OCSR_NO_EXTENSION_PROMPT`; scored on the CXSMILES core preceding any `|` extension.
 
 ---
@@ -175,54 +181,49 @@ All models were evaluated deterministically (greedy decoding, beam size 1) using
 │   ├── ground_truth.csv            # Isomeric SMILES, InChI, and structural descriptors for samples/
 │   └── <image_id>.png              # Individual sample images (not part of the held-out evaluation set)
 └── tools/
-    ├── make_random_split.py        # Stratified, seeded evaluation slice generator
-    ├── eval_ocsr.py                # Primary scoring harness (Exact, Tautomer, Connectivity, InChIKey, Parts)
+    ├── eval_ocsr.py                # Primary v2.0 scoring harness (Exact, Chiral, E/Z, Tautomer, Connectivity, Parts)
+    ├── eval_extra.py               # Extended error taxonomy, Chirality-Kept (No-E/Z), and ECFP4 Tanimoto evaluator
+    ├── stats_ci.py                 # Compound-level paired bootstrap 95% CIs and Holm-adjusted significance tests
     ├── compare_models.py           # Side-by-side multi-model comparison and agreement analyzer
+    ├── make_random_split.py        # Stratified, seeded evaluation slice generator (v1.1 protocol)
     ├── predict_decimer.py          # Resumable inference driver for DECIMER 2.7.1
-    ├── predict_molnextr.py         # Resumable inference driver for MolNexTR
     ├── predict_molscribe.py        # Resumable inference driver for MolScribe
+    ├── predict_molnextr.py         # Resumable inference driver for MolNexTR
     ├── predict_como.py             # Resumable inference driver for COMO
     ├── predict_molparser.py        # Resumable inference driver for MolParser-Mobile-V2
-    ├── predict_molsight.py         # Resumable inference driver for MolSight & MolSight-stereo
     ├── predict_ocsrglyph.py        # Resumable inference driver for OCSRGlyph
-    ├── predict_tinychemvl.py       # Resumable inference driver for TinyChemVL
+    ├── predict_molsight.py         # Resumable inference driver for MolSight & MolSight-stereo
     ├── predict_molgrapher.py       # Resumable/shardable inference driver for MolGrapher
     ├── setup_molgrapher_wsl.py     # Compatibility patcher for MolGrapher on modern PyTorch/CUDA
+    ├── predict_tinychemvl.py       # Resumable inference driver for TinyChemVL
     └── predict_markushglyph.py     # Resumable inference driver for MarkushGlyph
 ```
 
 ### Running Inference & Scoring
-All `predict_*.py` drivers accept a benchmark manifest (`--manifest`) and write resumable JSONL predictions (`{"image_id": "<id>", "prediction": "<SMILES>"}`):
+All `predict_*.py` drivers accept a benchmark manifest (`--manifest`), an images root (`--images-root`), and an optional template filter (`--template acs1996`), writing resumable JSONL predictions (`{"image_id": "<id>", "prediction": "<SMILES>"}`):
 
 ```bash
-# Score a prediction JSONL file against a local manifest
+# Score an ACS 1996 prediction JSONL file under the v2.0 protocol
 python tools/eval_ocsr.py \
-    --manifest path/to/manifest.jsonl \
-    --predictions preds.jsonl \
-    --out results/
+    --manifest path/to/manifest_all.jsonl \
+    --predictions predictions/v2_acs1996/decimer.jsonl \
+    --template acs1996 \
+    --out results/v2_acs1996_decimer
 
 # Generate a side-by-side multi-model comparison report
 python tools/compare_models.py \
-    --manifest path/to/manifest.jsonl \
-    --preds decimer=predictions/decimer.jsonl,molnextr=predictions/molnextr.jsonl,molscribe=predictions/molscribe.jsonl \
-    --out results/comparison.md
+    --manifest path/to/manifest_all.jsonl \
+    --template acs1996 \
+    --preds decimer=predictions/v2_acs1996/decimer.jsonl,molscribe=predictions/v2_acs1996/molscribe.jsonl,molnextr=predictions/v2_acs1996/molnextr.jsonl \
+    --out results/comparison_v2_acs1996.md
 ```
-
-Environment requirements for individual model drivers:
-* `predict_decimer.py`: `decimer==2.7.1` (downloads TensorFlow SavedModels into `$PYSTOW_HOME/DECIMER-V2` on first import; sets `TF_ENABLE_ONEDNN_OPTS=0` to prevent graph re-tracing slowdowns).
-* `predict_molnextr.py`: `molnextr`, `torch`, `timm`, `opencv-python`, `rdkit`, plus `--checkpoint` or `$MOLNEXTR_CHECKPOINT`.
-* `predict_molscribe.py`: `molscribe`, `torch`, `timm`, `opencv-python`, `rdkit`, plus `--checkpoint` or `$MOLSCRIBE_CHECKPOINT`.
-* `predict_como.py`: `como-ocsr`, plus `--checkpoint` or `$COMO_CHECKPOINT`.
-* `predict_molparser.py`: `torch`, `transformers`, `timm`, `opencv-python`, plus a local checkout via `--model` or `$MOLPARSER_MODEL`.
-* `predict_molsight.py`: checkout of `hustvl/MolSight` (`--repo-dir` or `$MOLSIGHT_REPO`) and checkpoint via `--checkpoint` or `$MOLSIGHT_CHECKPOINT` (installs an in-memory stub for the Linux-only training renderer `molsight.indigo`).
-* `predict_markushglyph.py`: `glyph` checkout via `$GLYPH_REPO`, adapter directory (`--checkpoint` or `$MARKUSHGLYPH_CHECKPOINT`), and `Qwen3.5-2B-Base` (`--base-model` or `$MARKUSH_BASE_MODEL`).
-* `predict_molgrapher.py`: MolGrapher environment (`--python`), checkout (`--repo` or `$MOLGRAPHER_REPO`), and checkpoints (`--checkpoints` or `$MOLGRAPHER_CHECKPOINTS`), or `--mol-dir` to convert an existing MolGrapher output directory.
 
 ---
 
 ## 6. Methodological Notes & Limitations
 
-* **Separation of Coordination Complexes**: Because haptic and dative organometallic bonding cannot be canonically represented by a single SMILES string and is poorly normalized by standard InChI, coordination complexes are evaluated via the structural `parts` key and reported separately from the organic headline.
+* **Separation of Coordination Complexes**: Because haptic and dative organometallic bonding cannot be canonically represented by a single SMILES string and is poorly normalized by standard InChI, coordination complexes are maintained in a dedicated benchmark track and evaluated via the structural `parts` key rather than mixed into the organic headline.
+* **Protocol Comparability Across Versions**: v1.1 evaluated a multi-template random slice (`random_seed42`), whereas v2.0 evaluates all five geometric variants under `acs1996` across an expanded organic corpus with denominator-calibrated stereochemical metrics. Longitudinal comparisons between v1.1 and v2.0 therefore reflect both the expanded chemical difficulty of the v2.0 corpus and the refined depiction/evaluation protocol.
 * **Exclusion of Homologue Mixtures**: Database records deposited as multi-component mixtures of homologues are excluded from the benchmark in favor of well-defined single-component entities.
 * **Algorithmic Depiction Provenance**: All depictions are generated algorithmically from validated chemical graphs and styled/rasterized in ChemDraw rather than cropped from copyrighted journal PDFs. This guarantees ground-truth label fidelity while isolating chemical structure recognition from document-level figure segmentation.
 * **Licensing**: All benchmark code, evaluation scripts, and sample files in this repository are released under the [MIT License](LICENSE). ChemDraw is commercial software of Revvity Signals. Ground-truth molecular records are derived from [PubChem](https://pubchem.ncbi.nlm.nih.gov/) (NCBI) and cross-checked against [Wikidata](https://www.wikidata.org/).

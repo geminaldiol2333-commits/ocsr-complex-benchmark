@@ -5,11 +5,11 @@ tools compute.
 
     python tools/verify_reported_numbers.py
 
-Parses the seven numeric columns of the published leaderboard table and compares
+Parses the v2.0 leaderboard columns in README.md and compares
 them with `data/eval_results/all_models/{summary.csv,extra_metrics.csv}`. Writes
 `data/eval_results/all_models/reproduction_check.md`.
 
-Why: the tables in `publish/README.md` are hand-assembled from the eval output.
+Why: the tables in `README.md` are hand-assembled from the eval output.
 A silent edit or a stale run would not be noticed otherwise, and a benchmark
 whose headline numbers cannot be re-derived from its own tools is not a
 benchmark.
@@ -21,18 +21,18 @@ import os
 import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-README = os.path.join(ROOT, "publish", "README.md")
+README = os.path.join(ROOT, "README.md")
 OUT = os.path.join(ROOT, "data", "eval_results", "all_models")
 
 # column in the published table -> (source csv, column in that csv)
+# v2.0 leaderboard cell indexes after the model and paradigm columns.
 COLUMNS = [
-    ("valid", "extra_metrics.csv", "organic_valid_%"),
-    ("exact", "summary.csv", "organic_exact_%"),
-    ("chirality", "extra_metrics.csv", "organic_weighted_chirality_%"),
-    ("tautomer", "summary.csv", "organic_tautomer_%"),
-    ("connectivity", "summary.csv", "organic_connectivity_%"),
-    ("tanimoto", "extra_metrics.csv", "organic_image_tanimoto_%"),
-    ("parts", "summary.csv", "coordination_parts_%"),
+    ("valid", "extra_metrics.csv", "organic_valid_%", 2),
+    ("exact", "summary.csv", "organic_exact_%", 3),
+    ("connectivity", "summary.csv", "organic_connectivity_%", 5),
+    ("chirality", "extra_metrics.csv", "organic_weighted_chirality_%", 8),
+    ("tautomer", "summary.csv", "organic_tautomer_%", 9),
+    ("tanimoto", "extra_metrics.csv", "organic_image_tanimoto_%", 10),
 ]
 
 # Table 3 (image-level error decomposition) -> column in extra_metrics.csv
@@ -67,8 +67,8 @@ def parse_table(text):
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         name = cells[0].replace("*", "").split(" (")[0].strip()
         numbers = []
-        for cell in cells[2:9]:
-            match = FIRST_FLOAT.search(cell.replace(",", ""))
+        for cell in cells[2:]:
+            match = FIRST_FLOAT.search(cell.replace("*", "").replace(",", ""))
             numbers.append(float(match.group()) if match else None)
         rows[name] = numbers
     return rows
@@ -110,7 +110,8 @@ def main():
     failures = 0
     checked = 0
     for model, numbers in published.items():
-        for (label, csv_name, column), value in zip(COLUMNS, numbers):
+        for label, csv_name, column, index in COLUMNS:
+            value = numbers[index - 2] if 0 <= index - 2 < len(numbers) else None
             computed_row = sources[csv_name].get(model)
             if computed_row is None or value is None:
                 lines.append(f"| {model} | {label} | {value} | — | — | not found |")
