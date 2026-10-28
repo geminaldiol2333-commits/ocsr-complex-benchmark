@@ -1,6 +1,6 @@
 # Samples
 
-A few example drawings of the rendering style. They are not the evaluation set.
+A few organic example drawings, redrawn with the v2.0 depiction pipeline from the v1.1 legends. Coordination complexes are not included. They are not the evaluation set.
 
 * `gallery.png` — contact sheet
 * `ground_truth.csv` — labels for these example images only
