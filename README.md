@@ -178,7 +178,8 @@ All models were evaluated deterministically (greedy decoding, beam size 1) using
     ├── make_random_split.py        # Stratified, seeded evaluation slice generator
     ├── eval_ocsr.py                # Primary scoring harness (Exact, Tautomer, Connectivity, InChIKey, Parts)
     ├── compare_models.py           # Side-by-side multi-model comparison and agreement analyzer
-    ├── predict_decimer.py          # Resumable inference driver for DECIMER 2.7.1
+    ├── predict_decimer.py          # Resumable inference driver for DECIMER 2.7.1 (official SavedModel)
+    ├── decimer_cached.py           # Same checkpoint, static KV-cache step, optional XLA
     ├── predict_molnextr.py         # Resumable inference driver for MolNexTR
     ├── predict_molscribe.py        # Resumable inference driver for MolScribe
     ├── predict_como.py             # Resumable inference driver for COMO
@@ -210,6 +211,7 @@ python tools/compare_models.py \
 
 Environment requirements for individual model drivers:
 * `predict_decimer.py`: `decimer==2.7.1` (downloads TensorFlow SavedModels into `$PYSTOW_HOME/DECIMER-V2` on first import; sets `TF_ENABLE_ONEDNN_OPTS=0` to prevent graph re-tracing slowdowns).
+* `decimer_cached.py`: same package and checkpoint, with a CUDA build of TensorFlow. See §7.
 * `predict_molnextr.py`: `molnextr`, `torch`, `timm`, `opencv-python`, `rdkit`, plus `--checkpoint` or `$MOLNEXTR_CHECKPOINT`.
 * `predict_molscribe.py`: `molscribe`, `torch`, `timm`, `opencv-python`, `rdkit`, plus `--checkpoint` or `$MOLSCRIBE_CHECKPOINT`.
 * `predict_como.py`: `como-ocsr`, plus `--checkpoint` or `$COMO_CHECKPOINT`.
@@ -226,3 +228,23 @@ Environment requirements for individual model drivers:
 * **Exclusion of Homologue Mixtures**: Database records deposited as multi-component mixtures of homologues are excluded from the benchmark in favor of well-defined single-component entities.
 * **Algorithmic Depiction Provenance**: All depictions are generated algorithmically from validated chemical graphs and styled/rasterized in ChemDraw rather than cropped from copyrighted journal PDFs. This guarantees ground-truth label fidelity while isolating chemical structure recognition from document-level figure segmentation.
 * **Licensing**: All benchmark code, evaluation scripts, and sample files in this repository are released under the [MIT License](LICENSE). ChemDraw is commercial software of Revvity Signals. Ground-truth molecular records are derived from [PubChem](https://pubchem.ncbi.nlm.nih.gov/) (NCBI) and cross-checked against [Wikidata](https://www.wikidata.org/).
+
+---
+
+## 7. Faster DECIMER inference
+
+The DECIMER numbers in this repository were scored from `DECIMER.predict_SMILES` (the standard SavedModel), driven by `tools/predict_decimer.py`. That graph has no KV cache: every token resends the whole prefix, and the loop stores the prefix in a dynamic TensorArray. XLA has no kernel for `TensorListResize`, so the official graph cannot be compiled. On one GPU the decode runs at about 40 ms per token.
+
+`tools/decimer_cached.py` loads the same DECIMER 2.7.1 checkpoint (Zenodo, via pystow). It rebuilds the EfficientNetV2-M encoder and the 6-layer decoder from the DECIMER package, copies weights by the Keras variable names recorded in the checkpoint object graph, and replaces the loop with one static step: query length 1, self-attention cache padded to the model's maximum length (302), image keys and values computed once. With `jit_compile=True` the steady state is 1.2 ms per token. On 20 compounds from this benchmark the SMILES matched the official predictions, and on one molecule of about 115 tokens the greedy token sequence matched the SavedModel. Step-0 and step-10 probabilities stayed within 1e-6 of the eager decoder. `--no-xla` keeps the same static step in ordinary graph mode, at about 12 ms per token.
+
+XLA invokes `ptxas` from `PATH`. The CUDA 12.4 assembler at `/usr/bin/ptxas` cannot target compute capability 12.0 (Blackwell); CUDA 12.8 or newer can. The script prepends a newer `ptxas` when it finds one under `/usr/local/cuda*/bin` or in the TensorFlow wheel (`nvidia/cuda_nvcc/bin`), and it sets `--xla_gpu_autotune_level=0`. At the default autotune level the compiler fails on the decoder's 512-wide matrix multiplies. `DECIMER_GPU_MEM_MB` caps device memory when the card is shared. The weights stay the official checkpoint; the tables above remain the official SavedModel scores.
+
+```bash
+python tools/decimer_cached.py path/to/image.png
+python tools/decimer_cached.py \
+    --manifest path/to/manifest.jsonl \
+    --images-root path/to/images \
+    --out predictions/decimer_cached.jsonl
+```
+
+DECIMER itself is MIT (Kohulan Rajan, Christoph Steinbeck, Achim Zielesny, and contributors). The package and the weights stay upstream; this file only rebuilds the decode step.
