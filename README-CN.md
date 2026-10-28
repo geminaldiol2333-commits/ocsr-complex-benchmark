@@ -189,7 +189,8 @@
     ├── stats_ci.py                 # 化合物级配对 bootstrap 95% CI 与 Holm 校正
     ├── compare_models.py           # 多模型对照
     ├── make_random_split.py        # v1.1 的分层抽样切片
-    ├── predict_decimer.py          # DECIMER 2.7.1
+    ├── predict_decimer.py          # DECIMER 2.7.1（官方 SavedModel）
+    ├── decimer_cached.py           # 同一权重，静态 KV cache，可选 XLA
     ├── predict_molscribe.py        # MolScribe
     ├── predict_molnextr.py         # MolNexTR
     ├── predict_como.py             # COMO
@@ -230,3 +231,23 @@ python tools/compare_models.py \
 * **同系物混合物不收入**。PubChem/Wikidata 里以同系物混合物存放的记录不进入基准，只保留成分明确的单一化合物。
 * **图是算法生成的**。全部图由经过校验的化学图生成，再按 ChemDraw 样式栅格化，不是从受版权保护的期刊 PDF 裁下来的。这样标准答案和画面一致，也把结构识别和版面分割分开。
 * **许可**。本仓库的代码、评分脚本和示例文件采用 [MIT 许可证](LICENSE)。ChemDraw 是 Revvity Signals 的商业软件。分子记录来自 [PubChem](https://pubchem.ncbi.nlm.nih.gov/)（NCBI），并与 [Wikidata](https://www.wikidata.org/) 交叉核对。
+
+---
+
+## 7. 更快的 DECIMER 推理
+
+本仓库里的 DECIMER 数字来自官方 `DECIMER.predict_SMILES`（标准 SavedModel），由 `tools/predict_decimer.py` 跑出。那张图没有 KV cache：每个 token 都把整个前缀再送一遍，前缀存在动态 TensorArray 里。XLA 没有 `TensorListResize` 的内核，官方图编译不了。单卡上大约 40 ms/token。
+
+`tools/decimer_cached.py` 读同一份 DECIMER 2.7.1 权重（Zenodo，经 pystow）。它用 DECIMER 包里的 EfficientNetV2-M 编码器和 6 层解码器重新建图，按 checkpoint 对象图里的 Keras 变量名拷权重，再把循环换成一步静态计算：query 长度为 1，自注意力 cache 补到模型最大长度 302，图像的 key 和 value 只算一次。`jit_compile=True` 时稳态大约 1.2 ms/token。本基准里抽过的 20 个化合物，SMILES 与官方预测一致；其中一个约 115 token 的分子，贪心 token 序列与 SavedModel 一致。第 0 步和第 10 步的概率与 eager 解码相差在 1e-6 以内。`--no-xla` 走同一静态步的普通图模式，大约 12 ms/token。
+
+XLA 从 `PATH` 调用 `ptxas`。`/usr/bin/ptxas` 里的 CUDA 12.4 汇编器编不了 compute capability 12.0（Blackwell）；CUDA 12.8 及更新的版本可以。脚本会在 `/usr/local/cuda*/bin` 或 TensorFlow wheel 的 `nvidia/cuda_nvcc/bin` 里找到更新的 `ptxas` 时把它放到 `PATH` 前面，并设置 `--xla_gpu_autotune_level=0`。默认 autotune 编不过解码器里宽 512 的矩阵乘。显卡被占用时可用 `DECIMER_GPU_MEM_MB` 限制显存。权重仍是官方 checkpoint；上面的表仍是官方 SavedModel 的分数。
+
+```bash
+python tools/decimer_cached.py path/to/image.png
+python tools/decimer_cached.py \
+    --manifest path/to/manifest.jsonl \
+    --images-root path/to/images \
+    --out predictions/decimer_cached.jsonl
+```
+
+DECIMER 本身是 MIT（Kohulan Rajan、Christoph Steinbeck、Achim Zielesny 及贡献者）。包和权重留在上游，这个文件只重建解码这一步。
